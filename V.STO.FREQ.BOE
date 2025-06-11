@@ -1,0 +1,58 @@
+*-----------------------------------------------------------------------------
+* <Rating>0</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STO.FREQ.BOE
+*-----------------------------------------------------------------------------
+* NAME:       V.STO.FREQ.BOE
+* PROGRAMMER:
+* DATE:       24 SEPTEMBER 2001
+*
+* TECHNICAL DESCRIPTION:
+* This sub-routine calculates the 5th working date after todays date.
+* Currently used for set up of Standing Orders so that the first payment
+* date cannot be set within 5 working days.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+*
+* CALLS:
+*     N/A
+*
+* CHANGE HISTORY:
+*     N/A
+*-------------------------------------------------------------------------
+* set up inserts required for this routine
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.STANDING.ORDER
+
+    IF COMI NE '' THEN
+        V_FREQ.DATE = COMI[1,8]
+        V_TODAY = TODAY
+
+        CALL CDT('',V_TODAY,"+5W")
+
+        V_TODAY5 = V_TODAY
+
+        IF NOT(NUM(V_FREQ.DATE)) THEN
+            COMI = V_TODAY5:V_FREQ.DATE
+            V_FREQ.DATE = V_TODAY5
+        END
+
+        IF V_FREQ.DATE LT V_TODAY5 THEN
+            ETEXT = "1st payment date cannot be set within 5days"
+            CALL STORE.END.ERROR
+        END
+    END
+
+    IF ETEXT = '' THEN
+        R.NEW(AF) = COMI
+        CALL REBUILD.SCREEN
+    END
+*
+    RETURN
+*
+END

@@ -1,0 +1,59 @@
+*-----------------------------------------------------------------------------
+* <Rating>0</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.TT.ENCRYPT.DATA.BOE
+*=========================================================================================
+* NAME: V.TT.ENCRYPT.DATA.BOE
+*
+* PROGRAMMER:Ronaldo Deocampo (Sofgen) for R11 upgrade - linked to R11.TAM.INTERFACE.BOE.
+*
+* DATE: 07/02/2013 - R11 Upgrade
+*
+* DESCRIPTION:
+*
+*    Updated for R11 Upgrade
+*
+*    Pre-authorisation routine for TELLER.ID application. This will encrypt any value typed into
+*    TELLER.ID local reference field 'TCD.API.PWD' to ensure the value is not stored in T24 in
+*    clear text. The encrypted value will then be decrypted by R11.TAM.INTERFACE.BOE at run-time
+*    when a TELLER cash dispense transaction is committed.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+*      <<R11 Upgrade T24-692>>
+*
+*      <<reference number>>
+*
+* CALLED BY:
+*       VERSION TELLER.ID,ENCRYPT.API.PWD.BOE
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*
+*      <<T24-692>>
+*
+*      <<change control entries>>
+*=========================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.TELLER.ID
+
+    AF = TT.TID.LOCAL.REF
+
+    V_LR.FLD = 'TCD.API.PWD'
+    V_LR.POS = ''
+    CALL GET.LOC.REF(APPLICATION, V_LR.FLD, V_LR.POS)
+
+    AV = V_LR.POS
+
+    IF R.NEW(AF)<1,AV> THEN
+        V_ORIG.VAL = R.NEW(AF)<1,AV>
+
+        R.NEW(AF)<1,AV> = ENCRYPT(V_ORIG.VAL, '', 2)
+    END
+
+    RETURN
+
+*-----------------------------------------------------------------------------
+END

@@ -1,0 +1,118 @@
+*-----------------------------------------------------------------------------
+* <Rating>-20</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.TOLL.ORDERING.ADDRESS.BOE
+
+*-----------------------------------------------------------------------------
+* NAME: V.TOLL.ORDERING.ADDRESS.BOE
+*
+* PROGRAMMER: Subhiksha (TEMENOS)
+*
+* DATE: 09/03/2020
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This validation routine is used to change the Ordering address details in Payment Order screen
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION - PAYMENT.ORDER,GBP.CHAPS.CT.BOE.TOLL
+*
+*
+*-----------------------------------------------------------------------------
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PAYMENT.ORDER
+    $INSERT I_F.VERSION
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+
+    GOSUB INIT
+    GOSUB PROCESS
+    RETURN
+
+INIT:
+
+    Y.DEBIT.ACCOUNT = R.NEW(PO.DEBIT.ACCOUNT)
+
+    FN.ACCOUNT = 'F.ACCOUNT'
+    F.ACCOUNT = ''
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    FN.CUSTOMER = 'F.CUSTOMER'
+    F.CUSTOMER = ''
+    CALL OPF(FN.CUSTOMER,F.CUSTOMER)
+    R.ACCOUNT = ""
+    ER.ACCOUNT = ""
+    R.CUSTOMER = ""
+    ER.CUSTOMER = ""
+
+
+    ACCOUNT.NUM = Y.DEBIT.ACCOUNT
+    IF NOT(ACCOUNT.NUM) THEN
+        ACCOUNT.NUM = COMI
+    END
+    CALL F.READ(FN.ACCOUNT,ACCOUNT.NUM,R.ACCOUNT,F.ACCOUNT,ER.ACCOUNT)
+    IF R.ACCOUNT THEN
+        Y.CUS.NO = R.ACCOUNT<AC.CUSTOMER>
+        CALL F.READ(FN.CUSTOMER,Y.CUS.NO,R.CUSTOMER,F.CUSTOMER,ER.CUSTOMER)
+        IF R.CUSTOMER THEN
+            Y.CUS.STREET = R.CUSTOMER<EB.CUS.STREET>
+            Y.CUS.TOWN.COUNTRY = R.CUSTOMER<EB.CUS.TOWN.COUNTRY>
+            Y.CUS.POST.CODE = R.CUSTOMER<EB.CUS.POST.CODE>
+            Y.CUS.COUNTRY = R.CUSTOMER<EB.CUS.COUNTRY>
+            Y.CUS.RES = R.CUSTOMER<EB.CUS.RESIDENCE>
+            Y.CUS.NAME = R.CUSTOMER<EB.CUS.NAME.1>
+            Y.CUS.BUILDING.NAME =  R.CUSTOMER<EB.CUS.BUILDING.NAME>
+        END
+    END
+    RETURN
+
+PROCESS:
+    IF LEN(Y.CUS.NAME) GT '33' THEN
+        Y.CUS.NAME = FOLD(Y.CUS.NAME, 33)
+        Y.CUS.NAME = FIELD(Y.CUS.NAME,FM,1)
+    END
+
+    IF LEN(Y.CUS.BUILDING.NAME) GT '33' THEN
+        Y.CUS.BUILDING.NAME = FOLD(Y.CUS.BUILDING.NAME, 33)
+        Y.CUS.BUILDING.NAME = FIELD(Y.CUS.BUILDING.NAME,FM,1)
+    END
+    IF LEN(Y.CUS.STREET) GT '33' THEN
+        Y.CUS.STREET = FOLD(Y.CUS.STREET, 33)
+        Y.CUS.STREET = FIELD(Y.CUS.STREET,FM,1)
+    END
+    R.NEW(PO.ORDERING.POST.ADDR.LINE)= ""
+    R.NEW(PO.ORDERING.CUST.NAME) = Y.CUS.NAME
+
+    IF Y.CUS.BUILDING.NAME THEN
+        R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,1> = Y.CUS.BUILDING.NAME
+        R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,2> = Y.CUS.STREET
+        TEMP = Y.CUS.RES:"/":Y.CUS.TOWN.COUNTRY:",":Y.CUS.POST.CODE
+
+        IF LEN(TEMP) GT '33' THEN
+            TEMP = FOLD(TEMP, 33)
+            R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,3>= FIELD(TEMP,FM,1)
+        END ELSE
+            R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,3> = TEMP
+        END
+    END ELSE
+        R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,1> = Y.CUS.STREET
+        R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,2> = Y.CUS.TOWN.COUNTRY
+        TEMP = Y.CUS.RES:"/":Y.CUS.POST.CODE
+
+        IF LEN(TEMP) GT '33' THEN
+            TEMP = FOLD(TEMP, 33)
+            R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,3>= FIELD(TEMP,FM,1)
+        END ELSE
+            R.NEW(PO.ORDERING.POST.ADDR.LINE)<1,3> = TEMP
+        END
+    END
+
+    RETURN
+
+END

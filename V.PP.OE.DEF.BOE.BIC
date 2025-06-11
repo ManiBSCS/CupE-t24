@@ -1,0 +1,27 @@
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.DEF.BOE.BIC
+*
+*-----------------------------------------------------------------------------
+* NAME:
+* AUTHOR : KARTHIKEYAN.R
+* DESC   : Routing to default BOE BIC ' BKENGB2LXXX' as Debtor BIC after validating.
+*-----------------------------------------------------------------------------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+
+    IF V$FUNCTION EQ 'I' OR V$FUNCTION EQ 'S' THEN
+
+        Y.SOURCE = R.NEW(PP.OEYG.Source)
+        Y.DIRECTION = R.NEW(PP.OEYG.Direction)
+        Y.TRNS.TYPE = R.NEW(PP.OEYG.TransferType)
+
+        IF Y.SOURCE EQ 'OE' AND Y.DIRECTION EQ 'O' AND Y.TRNS.TYPE EQ 'B' THEN
+            R.NEW(PP.OEYG.OrderingIdentifierCode) = 'BKENGB2LXXX'
+        END
+
+    END
+
+    RETURN
+END

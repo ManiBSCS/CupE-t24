@@ -1,0 +1,55 @@
+**-----------------------------------------------------------------------------
+*-----------------------------------------------------------------------------
+* <Rating>104</Rating>
+*-----------------------------------------------------------------------------
+*
+    SUBROUTINE V.POT.VALIDATE.TOLL.BOE
+*=========================================================================================
+* NAME: V.PP.VALIDATE.TOLL.BOE
+*
+* DESCRIPTION:
+*      Validation routines on various GLOBUS fields when entering an Transaction in PPT.OE.TEMPLATE
+*      The version will use Globus Commmon Var "AF" to determine which field we are on
+*
+* TECHNICAL DESCRIPTION
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+* VERSION PPT.OE.TEMPLATE,CHAPS.GBP.BOE.TOLL
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+* 09/03/2022 - KS - R21 Upgrade
+* ======================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PPT.OE.TEMPLATE
+    $INSERT I_GTS.COMMON      ;* This is for OFS
+    $INSERT I_F.OFS.SOURCE
+    $INSERT I_F.VERSION
+    $USING EB.SystemTables
+    $USING PI.Contract
+*=========================================================================================
+    GOSUB INITIALISE
+    BEGIN CASE
+    CASE AF = PPTMP.TransactionAmount
+        GOSUB CHECK.CCY
+    CASE 1
+        RETURN
+    END CASE
+    RETURN
+*=========================================================================================
+INITIALISE:
+    V_COMI = ""; V_LEN = 0
+    RETURN
+*=========================================================================================
+CHECK.CCY:
+    IF R.NEW(PPTMP.TransactionCurrency) = "" THEN
+        R.NEW(PPTMP.TransactionCurrency) = "GBP"
+    END
+    RETURN
+
+END

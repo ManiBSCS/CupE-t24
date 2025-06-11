@@ -1,0 +1,275 @@
+**-----------------------------------------------------------------------------
+*-----------------------------------------------------------------------------
+* <Rating>1512</Rating>
+*-----------------------------------------------------------------------------
+*
+    SUBROUTINE V.PP.FINAL.CHECK.TOLL.BOE
+*=========================================================================================
+* NAME: V.PP.FINAL.CHECK.TOLL.BOE
+*
+*********** 14/04/2020 - KS - PLEASE BE AWARE THAT THIS IS BASED ON THE EXISTING ROUTINE
+*********** V.FT.VALIDATE.TOLL.BOE CHANGES HAVE BEEN MADE FOR TOLL Upgrade 2020 *********
+*
+* DESCRIPTION:
+*      Validation routines on various GLOBUS fields when entering an Transaction in PAYMENT.ORDER
+*      The version will use Globus Commmon Var "Y.FIELD.NAME" to determine which field we are on
+*
+* TECHNICAL DESCRIPTION
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+* VERSION PAYMENT.ORDER,DR1.CR1.BOE.GBP.TOLL
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+* Updated some changes to get COMI values -- manikandan(Temenos)
+* 09/03/2021 - Call V.TOLL.ORDERING.ADDRESS.BOE - Subhiksha C - To populate ordering address details from customer table
+*
+* 09/01/2024 - KS - R21 Upgrade - SC related changes
+* ======================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PAYMENT.ORDER
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+    $INSERT I_GTS.COMMON      ;* This is for OFS
+    $INSERT I_F.OFS.SOURCE
+    $INSERT I_F.VERSION
+    $USING EB.SystemTables
+    $USING PI.Contract
+*=========================================================================================
+
+    IF V$FUNCTION EQ 'D' THEN RETURN
+
+    GOSUB INITIALISE
+
+    Y.FIELD.NAME = PO.DEBIT.CCY
+    IF Y.ERROR NE "YES" THEN GOSUB DEBIT.CURRENCY
+
+    Y.FIELD.NAME = PO.DEBIT.VALUE.DATE
+    IF Y.ERROR NE "YES" THEN GOSUB DEBIT.VALUE.DATE
+
+    Y.FIELD.NAME = PO.DEBIT.ACCOUNT
+    IF Y.ERROR NE "YES" THEN GOSUB DEBIT.ACCT.NO
+
+    Y.FIELD.NAME = PO.CREDIT.ACCOUNT
+    IF Y.ERROR NE "YES" THEN GOSUB CREDIT.ACCT.NO
+
+    Y.FIELD.NAME = PO.INTERMED.BANK.ACC
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.INTERMED.BANK.IBAN
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.INTERMED.BANK.CLEARING.CODE
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.SORT.CODE.FORMAT
+
+    Y.FIELD.NAME = PO.ACCT.WITH.BANK.ACC
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.ACCT.WITH.BANK.IBAN
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.ACCT.WITH.BANK.CLEARING.CODE
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.SORT.CODE.FORMAT
+
+    Y.FIELD.NAME = PO.BENEFICIARY.ACCOUNT.NO
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.BENEFICIARY.IBAN
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.AC.OR.IBAN.FORMAT
+
+    Y.FIELD.NAME = PO.BEN.BANK.CLEARING.CODE
+    IF Y.ERROR NE "YES" THEN GOSUB CHECK.SORT.CODE.FORMAT
+
+    RETURN
+*=========================================================================================
+INITIALISE:
+* Open Account File
+    FV.ACCOUNT = ""  ; FN.ACCOUNT = "F.ACCOUNT"
+    CALL OPF(FN.ACCOUNT, FV.ACCOUNT)
+    V_COMI = ""; V_LEN = 0
+    Y.ERROR = ""
+    RETURN
+*=========================================================================================
+DEBIT.CURRENCY:
+* Validation to ensure that the Currency entered is GBP.
+**COMI Changes
+    V_COMI = R.NEW(Y.FIELD.NAME)
+    V_VALID.CCY = "GBP"
+
+    V_DR.CCY = V_COMI
+    LOCATE V_DR.CCY IN V_VALID.CCY<1> SETTING V_CCY.LOC THEN
+* Update the Debit CCY
+        R.NEW(PO.DEBIT.CCY) = V_DR.CCY
+*        CALL REFRESH.FIELD(PO.DEBIT.CCY,"")       ;* RK 23/05/2003
+    END ELSE
+* Display an Error as we have not found any VALID_CCY in COMI.
+        ETEXT = "Invalid Currency. ":CONVERT(FM, " or ",V_VALID.CCY):" expected."
+        AF = ""; Y.ERROR = "YES"
+        CALL STORE.END.ERROR
+        RETURN      ;* Return to CASE because we have an ERROR!!
+    END
+    RETURN
+*=========================================================================================
+DEBIT.VALUE.DATE:
+*COMI Changes
+    V_COMI = R.NEW(Y.FIELD.NAME)
+
+    IF V_COMI EQ "" THEN
+        V_COMI = TODAY
+    END
+    IF V_COMI LT TODAY THEN   ;* Only allow Today or Forward Dated VALUE.
+        ETEXT = "Value Date cannot be Back Valued"
+        AF = ""; Y.ERROR = "YES"
+        CALL STORE.END.ERROR
+        RETURN
+    END ELSE        ;* If VALUE is eq TODAY or FORWARD DATE then
+        EB.SystemTables.setRNew(PI.Contract.PaymentOrder.PoDebitValueDate,V_COMI)
+        IF MESSAGE EQ "VAL" THEN
+            V_COMI = R.NEW(PO.DEBIT.VALUE.DATE)
+            CALL IN2INT('16.1','INT')
+            IF ETEXT NE "" THEN
+                EB.SystemTables.setRNew(PI.Contract.PaymentOrder.PoPaymentExecutionDate,V_COMI)
+            END
+            ETEXT = ""
+        END
+    END
+
+    RETURN
+*=========================================================================================
+DEBIT.ACCT.NO:
+    V_COMI = R.NEW(Y.FIELD.NAME)
+    IF GTSACTIVE AND NOT(OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION') THEN
+        CALL IN2ACC('16.1','ACC')
+        V_DR.ACCT.NO = V_COMI ;* This is the Globus Common Input Var
+        R.NEW(PO.DEBIT.ACCOUNT) = V_COMI
+    END ELSE
+        CALL IN2ACC('16.1','ACC')
+        V_DR.ACCT.NO = V_COMI ;* This is the Globus Common Input Var
+    END
+* Read Acct Record
+    R.ACCOUNT = "" ; V_AC.READ.ERR = ""
+    CALL F.READ(FN.ACCOUNT, V_DR.ACCT.NO, R.ACCOUNT, FV.ACCOUNT, V_AC.READ.ERR)
+    V_AC.CCY = R.ACCOUNT<AC.CURRENCY>   ;* CCY of A/C
+    IF V_AC.READ.ERR THEN
+        ETEXT = V_AC.READ.ERR
+        AF = ""; Y.ERROR = "YES"
+        CALL STORE.END.ERROR
+        RETURN
+    END ELSE
+        IF V_AC.CCY EQ "GBP" THEN
+            R.NEW(PO.DEBIT.CCY) = V_AC.CCY
+        END ELSE
+            AF = ""; Y.ERROR = "YES"
+            ETEXT = "Only GBP Account allowed in this Screen"
+            CALL STORE.END.ERROR
+            RETURN
+        END
+    END
+    CALL V.TOLL.ORDERING.ADDRESS.BOE    ;* Changes done by Subhiksha to populate Ordering address from customer table
+
+    RETURN          ;* Back to begining Case Statement.
+*=========================================================================================
+CREDIT.ACCT.NO:
+    V_COMI = R.NEW(Y.FIELD.NAME)
+    CALL IN2ACC('16.1','ACC')
+    V_CR.ACCT.NO = V_COMI     ;* This is the Globus Common Input Var
+* Read Acct Record
+    R.ACCOUNT = "" ; V_AC.READ.ERR = ""
+    IF V_COMI NE "" THEN
+        CALL F.READ(FN.ACCOUNT, V_CR.ACCT.NO, R.ACCOUNT, FV.ACCOUNT, V_AC.READ.ERR)
+        V_AC.CCY = R.ACCOUNT<AC.CURRENCY>         ;* CCY of A/C
+        IF V_AC.READ.ERR THEN
+            ETEXT = V_AC.READ.ERR
+            AF = ""; Y.ERROR = "YES"
+            CALL STORE.END.ERROR
+            RETURN
+        END ELSE
+            IF V_AC.CCY EQ "GBP" THEN
+                RETURN
+            END ELSE
+                ETEXT = "Only GBP Account allowed in this Screen"
+                AF = ""; Y.ERROR = "YES"
+                CALL STORE.END.ERROR
+                RETURN
+            END
+        END
+    END
+    RETURN
+*=========================================================================================
+CHECK.SORT.CODE.FORMAT:
+    V_COMI = R.NEW(Y.FIELD.NAME)
+    Y.FIELD = ""; Y.LEN.ADDR = 0
+    IF Y.FIELD.NAME = PO.INTERMED.BANK.CLEARING.CODE THEN
+        IF V_COMI NE "" AND R.NEW(PO.INTERMED.BIC) EQ "" THEN
+            IF R.NEW(PO.INTERMED.POSTAL.ADDR.LINE) EQ "" THEN
+                ETEXT = "Intermediary Institution BIC or Name and Address are mandatory when Sort Code is entered. "
+                AF = ""; Y.ERROR = "YES"
+                CALL STORE.END.ERROR
+                RETURN
+            END ELSE
+                Y.LEN.ADDR = DCOUNT(R.NEW(PO.INTERMED.POSTAL.ADDR.LINE),VM)
+                IF Y.LEN.ADDR = 1 THEN
+                    ETEXT = "Intermediary Institution Address is mandatory when Sort Code and Name are entered. "
+                    AF = ""; Y.ERROR = "YES"
+                    CALL STORE.END.ERROR
+                    RETURN
+                END
+            END
+        END
+        Y.FIELD = PO.INTERMED.BANK.IDENTIFIER
+    END ELSE
+        IF Y.FIELD.NAME = PO.ACCT.WITH.BANK.CLEARING.CODE AND V_COMI NE "" AND R.NEW(PO.ACCT.WITH.BANK.BIC) EQ "" THEN
+            IF R.NEW(PO.ACCT.WITH.BANK.POST.ADDR.LN) EQ "" THEN
+                ETEXT = "Account with Institution BIC or Name and Address are mandatory when Sort Code is entered. "
+                AF = ""; Y.ERROR = "YES"
+                CALL STORE.END.ERROR
+                RETURN
+            END ELSE
+                Y.LEN.ADDR = DCOUNT(R.NEW(PO.ACCT.WITH.BANK.POST.ADDR.LN),VM)
+                IF Y.LEN.ADDR = 1 THEN
+                    ETEXT = " Account with Institution Address is mandatory when Sort Code and Name are entered. "
+                    AF = ""; Y.ERROR = "YES"
+                    CALL STORE.END.ERROR
+                    RETURN
+                END
+            END
+        END
+        Y.FIELD = PO.ACCT.WITH.BANK.IDENTIFIER
+    END
+
+    BEGIN CASE
+    CASE V_COMI = ""
+        RETURN
+    CASE (V_COMI[1,4] = "//SC" AND LEN(V_COMI) = 10)
+        R.NEW(Y.FIELD.NAME) = (V_COMI[5,6])
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE (V_COMI[1,2] = "SC" AND LEN(V_COMI) = 8)
+        R.NEW(Y.FIELD.NAME) = (V_COMI[3,6])
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE (V_COMI[1,2] <> "SC" AND LEN(V_COMI) = 6)
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE 1
+        ETEXT = "Incorrect Sort Code entered. Please use the format SCxxxxxx. "
+        AF = ""; Y.ERROR = "YES"
+        CALL STORE.END.ERROR
+
+        RETURN
+    END CASE
+    V_COMI = ""
+    RETURN
+*=========================================================================================
+CHECK.AC.OR.IBAN.FORMAT:
+    V_COMI = R.NEW(Y.FIELD.NAME)
+    IF V_COMI = "" THEN RETURN
+    V_LEN = LEN(V_COMI)-1
+    IF V_COMI[1,1] = "/" THEN
+        R.NEW(Y.FIELD.NAME) = V_COMI[2,V_LEN]
+    END
+    V_COMI = ""; V_LEN = 0
+    RETURN
+END

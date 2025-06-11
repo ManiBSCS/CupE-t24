@@ -1,0 +1,46 @@
+*-----------------------------------------------------------------------------
+* <Rating>0</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.VAL.CUR.BOE
+*====================================================================================
+* NAME: V.PP.OE.VAL.CUR.BOE
+* PROGRAMMER: Manikandan
+* DATE: 07/04/20
+* TECHNICAL DESCRIPTION:
+*           This Version Subroutine is designed to validate the currency should be in EUR/USD in Outgoing Call Transfer 103/202 USD/EUR payments.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*     N/A
+*====================================================================================
+* INSERTS
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.EB.ERROR
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.ACCOUNT
+
+    V_DB.ACC = COMI
+    FN.ACCOUNT = 'F.ACCOUNT'
+    F.ACCOUNT = ''
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    R.ACCOUNT=''
+    CALL F.READ(FN.ACCOUNT,V_DB.ACC,R.ACCOUNT,F.ACCOUNT,ER.ACCOUNT)
+    IF R.ACCOUNT THEN
+        DB.ACC.CUR = R.ACCOUNT<AC.CURRENCY>
+    END
+    IF DB.ACC.CUR NE 'GBP' THEN
+        AF = PP.OEYG.DebitAccountNumber
+        AV = 1
+        ETEXT = "Invalid Debit Account Number -":V_DB.ACC:"& Currency Entered -":DB.ACC.CUR
+        CALL STORE.END.ERROR
+    END
+    CALL V.BOE.DEL.DBTR.CTRY
+    RETURN
+END

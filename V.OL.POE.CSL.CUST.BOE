@@ -1,0 +1,117 @@
+*-----------------------------------------------------------------------------
+* <Rating>-37</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.OL.POE.CSL.CUST.BOE
+*=========================================================================================
+* NAME: V.OL.POE.CSL.CUST.BOE
+*
+* PROGRAMMER: Peter Anton (Dwaine Willmott)
+*
+* DATE: 27/10/2020 (16/04/2010)
+*
+* DESCRIPTION:
+* This routine reads the Customer from the Debit Account then reads the Customer record to
+* collect its Mnemonic. This is placed into the OL.CUSTOMER local ref field of the PP.ORDER.ENTRY.
+
+*
+* This is a copy of the original routine V.OL.CSL.CUST.BOE being used specifically on the
+* following CSL OFS versions:
+*
+* PP.ORDER.ENTRY,OFS.CSL.BOE
+*
+* TECHNICAL DESCRIPTION
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+*
+* CALLED BY:
+*
+* CALLS :
+* *
+* CHANGE HISTORY:
+*
+*=========================================================================================
+* Include the INSERT files required for this process:
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.CUSTOMER
+    $INSERT I_F.ACCOUNT
+    $INSERT I_GTS.COMMON
+
+*=========================================================================================
+        ETEXT = ''
+        GOSUB OPEN.FILES
+        GOSUB LOCAL.REF.SETUP
+        GOSUB UPDATE.FIELD
+
+    RETURN
+
+*=========================================================================================
+OPEN.FILES:
+
+    FN.ACCOUNT = "F.ACCOUNT"
+    F.ACCOUNT = ""
+    CALL OPF(FN.ACCOUNT, F.ACCOUNT)
+
+    FN.CUSTOMER = "F.CUSTOMER"
+    F.CUSTOMER = ""
+    CALL OPF(FN.CUSTOMER, F.CUSTOMER)
+
+    RETURN
+*=========================================================================================
+LOCAL.REF.SETUP:
+
+* Build a LOCAL.REF.ARRAY for the PP.ORDER.ENTRY application.
+
+    OL.CUSTOMER.FN = "OL.CUSTOMER"
+
+    LOC.REF.ARRAY = ""
+    APP.NAME = "PP.ORDER.ENTRY"
+    CALL EB.LOCREF.SETUP(APP.NAME,LOC.REF.ARRAY)
+    NO.FIELDS = DCOUNT(LOC.REF.ARRAY,FM)
+    FOR YYY = 1 TO NO.FIELDS
+        LOC.REF.ARRAY<YYY> = LOC.REF.ARRAY<YYY,1>
+    NEXT YYY
+
+* Retrieve the position of the LOCAL.REF field required
+
+    LOCATE OL.CUSTOMER.FN IN LOC.REF.ARRAY<1> SETTING OL.CUSTOMER.POS ELSE
+        TEXT = OL.CUSTOMER.FN:' NOT FOUND IN LOCAL.REF FOR ': APP.NAME
+        CALL ERR.BOE('FATAL')
+    END
+
+    RETURN
+*==========================================================================================
+UPDATE.FIELD:
+* From the value supplied from ORDERING.CUST determine if it a valid customer number
+* by returning the Customer Mnemonic.  If a Mnemonic is not found then produce an error.
+*
+* There isn't a Ordering Cust on OE, so we have to read the PP.OEYG.DebitAccountNumber.
+
+    V_DR.ACCT = R.NEW(PP.OEYG.DebitAccountNumber)
+    V_ORD.CUST = ""
+*there isn't an ORDERING.CUST on PP.ORDER.ENTRY.
+*Take the Customer from the Debit Account.
+
+    CALL F.READ(FN.ACCOUNT,V_DR.ACCT,R.ACCOUNT,F.ACCOUNT,ERR.ACCOUNT)
+    IF R.ACCOUNT THEN
+        V_ORD.CUST =  R.ACCOUNT<AC.CUSTOMER>
+    END
+
+    V_CUS.MNEMONIC = ""
+    CALL F.READ(FN.CUSTOMER,V_ORD.CUST,R.CUSTOMER,F.CUSTOMER,ERR.CUSTOMER)
+    IF R.CUSTOMER THEN
+        V_CUS.MNEMONIC = R.CUSTOMER<EB.CUS.MNEMONIC>
+    END
+
+    IF V_CUS.MNEMONIC EQ "" THEN
+        ETEXT = "INVALID CUSTOMER FOR ":V_DR.ACCT
+    END ELSE
+        R.NEW(PP.OEYG.LOCAL.REF)<1,OL.CUSTOMER.POS> = V_CUS.MNEMONIC
+    END
+
+    RETURN
+*=========================================================================================
+END       ;* End of program

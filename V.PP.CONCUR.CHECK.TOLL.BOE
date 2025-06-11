@@ -1,0 +1,197 @@
+*-----------------------------------------------------------------------------
+* <Rating>159</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.CONCUR.CHECK.TOLL.BOE
+*=========================================================================================================
+* Copied the functionality of the routine V.FT.STO.CONCUR.CHECK.TOLL.BOE in TPH
+* WRITTEN BY: ROB WEBB (BoE)
+* DATE: 14/08/2012
+*
+* TECHNICAL DESCRIPTION:
+*
+* This Version routine is attached to the ID.RTN field on the underlying TOLL PAYMENT.ORDER
+* and PPT.OE.TEMPLATE VERSION records.
+*
+* Purpose:
+* To provide a mechanism for the passing of variable information from the BoE TOLL user interface to the T24
+* application (via the Webservice Version representation) for all Version data entry functions
+* (Input - including amendements, Authorisation and Deletion).
+* Whilst it would be possible to pass information in other fields with the Input function. This would not
+* be possible for Authorisation and Deletion so this functionality is provided using the ID.RTN API.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+* T24 R11 OLL REPLACEMENT (TOLL)
+*
+* CALLED BY:
+* ID.RTN field on specific (TOLL) PAYMENT.ORDER and PPT.OE.TEMPLATE VERSIONS
+*
+* CALLS:
+* OPF, F.READ, GET.LOC.REF
+*
+* CHANGE HISTORY:
+* Kavitha Srinivasan 27/07/2020
+* TOLL - Upgrade 2020 - Changes done for TPH files
+*=========================================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.VERSION
+    $INSERT I_F.PPT.OE.TEMPLATE
+    $INSERT I_F.PAYMENT.ORDER
+*=========================================================================================================
+
+    GOSUB INITIALISE
+    GOSUB PROCESS
+
+    RETURN
+*=========================================================================================================
+PROCESS:
+
+    IF E THEN RETURN
+
+    IF V_CONCURRENCY.CHECK.POS THEN
+        GOSUB CONVERT.TO.ID.AND.TIME
+    END
+
+    IF E THEN RETURN
+
+    IF V$FUNCTION NE 'S' THEN
+        GOSUB CONCURRENCY.CHECK
+    END
+
+    RETURN
+*=========================================================================================================
+INITIALISE:
+* Initalise variables
+
+    E = ""
+    V_ID.ELEMENT = ''
+    V_ID.TIME.ELEMENT = ''
+
+    V_CONCURRENCY.CHECK.POS = ""
+    V_CONCURRENCY.CHECK.POS = INDEX(COMI,"*",1)
+
+    V_LR.TIME.STAMP = ''
+    CALL GET.LOC.REF(APPLICATION, 'TIME.STAMP', V_LR.TIME.STAMP)
+
+    IF V_LR.TIME.STAMP EQ '' THEN
+        E = "MANDATORY DATE.TIME ELEMENT MISSING"
+    END
+
+    RETURN
+*=========================================================================================================
+CONVERT.TO.ID.AND.TIME:
+
+    V_COMI.ORIG = COMI
+
+    V_ID.ELEMENT = COMI['*',1,1]
+    V_ID.TIME.ELEMENT = COMI['*',2,1]
+
+    V_LEN.TIME.ELEMENT = LEN(V_ID.TIME.ELEMENT)
+    V_TIME.FMT = ISDIGIT(V_ID.TIME.ELEMENT)
+
+    COMI = V_ID.ELEMENT
+
+    IF APPLICATION EQ 'PPT.OE.TEMPLATE' THEN
+        IF V_LEN.TIME.ELEMENT = "12" AND V_TIME.FMT = "1" THEN
+        END ELSE
+            E = "INVALID DATE.TIME FORMAT PASSED FOR VALIDATION:":V_ID.TIME.ELEMENT:" - FORMAT SHOULD BE NUMERICAL DATE YYMMDDHHMMSS"
+        END
+
+    END ELSE
+        IF V_LEN.TIME.ELEMENT = "12" AND V_TIME.FMT = "1" THEN
+        END ELSE
+            E = "INVALID DATE.TIME FORMAT PASSED FOR VALIDATION:":V_ID.TIME.ELEMENT:" - FORMAT SHOULD BE NUMERICAL DATE YYMMDDHHMMSS"
+        END
+    END
+
+    RETURN
+*=========================================================================================================
+CONCURRENCY.CHECK:
+
+    IF APPLICATION EQ 'PPT.OE.TEMPLATE' THEN
+        GOSUB OPEN.FILE.POT
+        GOSUB COMPARE.POT.ID.TIME.ELEMENT
+    END ELSE
+        GOSUB OPEN.FILE.PO.NAU
+        GOSUB COMPARE.PO.ID.TIME.ELEMENT
+    END
+
+    RETURN
+*=========================================================================================================
+OPEN.FILE.POT:
+* Open the FBNK.PPT.OE.TEMPLATE$NAU file
+    FN.PPT.OE.TEMPLATE.NAU.FILE = 'F.PPT.OE.TEMPLATE$NAU'
+    F.PPT.OE.TEMPLATE.NAU.FILE = ''
+    CALL OPF(FN.PPT.OE.TEMPLATE.NAU.FILE, F.PPT.OE.TEMPLATE.NAU.FILE)
+
+* Open the FBNK.PPT.OE.TEMPLATE file
+    FN.PPT.OE.TEMPLATE.FILE = 'F.PPT.OE.TEMPLATE'
+    F.PPT.OE.TEMPLATE.FILE = ''
+    CALL OPF(FN.PPT.OE.TEMPLATE.FILE, F.PPT.OE.TEMPLATE.FILE)
+
+    RETURN
+*=========================================================================================================
+COMPARE.POT.ID.TIME.ELEMENT:
+
+    V_POT.LAST.NAU.TIME = ""
+    V_POT.LAST.LIVE.TIME = ""
+
+    R.PPT.OE.TEMPLATE.NAU.FILE = '' ; Y.ERR = ''
+    CALL F.READ(FN.PPT.OE.TEMPLATE.NAU.FILE, COMI, R.PPT.OE.TEMPLATE.NAU.FILE, F.PPT.OE.TEMPLATE.NAU.FILE, Y.ERR)
+
+    IF R.PPT.OE.TEMPLATE.NAU.FILE THEN
+        V_POT.LAST.NAU.TIME = R.PPT.OE.TEMPLATE.NAU.FILE<PPTMP.LOCAL.REF,V_LR.TIME.STAMP>
+*       use checking only if the record has been edited using a version with concurrency functionality
+        IF V_POT.LAST.NAU.TIME THEN
+            IF V_ID.TIME.ELEMENT NE V_POT.LAST.NAU.TIME THEN
+                E = "E DATE.TIME PROVIDED:":V_ID.TIME.ELEMENT:" - DOES NOT MATCH UNAUTHORISED RECORD:":V_POT.LAST.NAU.TIME
+            END
+        END
+    END ELSE        ;* Read Live file if the record @ID isn't located on the unauthorised file.
+        R.PPT.OE.TEMPLATE.FILE = '' ; Y.ERR = ''
+        CALL F.READ(FN.PPT.OE.TEMPLATE.FILE, COMI, R.PPT.OE.TEMPLATE.FILE, F.PPT.OE.TEMPLATE.FILE, Y.ERR)
+
+        IF R.PPT.OE.TEMPLATE.FILE THEN
+            V_POT.LAST.LIVE.TIME = R.PPT.OE.TEMPLATE.FILE<PPTMP.LOCAL.REF,V_LR.TIME.STAMP>   ;* The most recent element
+
+*           use checking only if the record has been edited using a version with concurrency functionality
+            IF V_POT.LAST.LIVE.TIME THEN
+                IF V_ID.TIME.ELEMENT NE V_POT.LAST.LIVE.TIME THEN
+                    E = "E DATE.TIME PROVIDED:":V_ID.TIME.ELEMENT:" - DOES NOT MATCH LIVE RECORD:":V_POT.LAST.LIVE.TIME
+                END
+            END
+        END
+    END
+
+    RETURN
+*=========================================================================================================
+OPEN.FILE.PO.NAU:
+* Open the FBNK.PAYMENT.ORDER$NAU file
+
+    FN.PAYMENT.ORDER.NAU.FILE = 'F.PAYMENT.ORDER$NAU'
+    F.PAYMENT.ORDER.NAU.FILE = ''
+    CALL OPF(FN.PAYMENT.ORDER.NAU.FILE, F.PAYMENT.ORDER.NAU.FILE)
+
+    RETURN
+*=========================================================================================================
+COMPARE.PO.ID.TIME.ELEMENT:
+
+    V_PO.LAST.NAU.TIME = ""
+
+    R.PAYMENT.ORDER.NAU.FILE = '' ; Y.ERR = ''
+    CALL F.READ(FN.PAYMENT.ORDER.NAU.FILE, COMI, R.PAYMENT.ORDER.NAU.FILE, F.PAYMENT.ORDER.NAU.FILE, Y.ERR)
+
+    IF R.PAYMENT.ORDER.NAU.FILE THEN
+        V_PO.LAST.NAU.TIME = R.PAYMENT.ORDER.NAU.FILE<PO.LOCAL.REF,V_LR.TIME.STAMP,1>    ;* The most recent element
+
+*       use checking only if the record has been edited using a version with concurrency functionality
+        IF V_PO.LAST.NAU.TIME THEN
+            IF V_ID.TIME.ELEMENT NE V_PO.LAST.NAU.TIME THEN
+                E = "E DATE.TIME PROVIDED:":V_ID.TIME.ELEMENT:" - DOES NOT MATCH UNAUTHORISED RECORD:":V_PO.LAST.NAU.TIME
+            END
+        END
+    END
+*   Checking done only in INAU because LIVE PO cannot be amended.
+    RETURN
+*=========================================================================================================
+END

@@ -1,0 +1,58 @@
+*-----------------------------------------------------------------------------
+* <Rating>-7</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.OE.VAL.TAG.72.BOE
+
+*-----------------------------------------------------------------------------
+* NAME: V.OE.VAL.TAG.72.BOE
+*
+* PROGRAMMER: Manikandanm(TEMENOS)
+*
+* DATE: 07/01/2020
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This validation routine is used to fold % trim values  present in the tag 72 into as 6*35 values & throws an error if its exceeds
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION.CONTROL - PP.ORDER.ENTRY
+*
+*
+*-----------------------------------------------------------------------------
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_F.EB.ERROR
+    $USING PP.OrderEntryGUI
+    $USING EB.SystemTables
+
+*    IF V$FUNCTION EQ 'I' THEN
+*        V_PAYDIRECTION = R.NEW(PP.OEYG.Direction)
+
+        V.IC.TEMP = EB.SystemTables.getComi()
+*        IF LEN(V.IC.TEMP) GT '35' THEN
+*            AF = PP.OEYG.InstructionCode
+*            TEXTERR = 'PP-OE.TAG.72.ERR1.BOE'
+*            ETEXT = TEXTERR
+*            CALL STORE.END.ERROR
+*        END
+        V.VC.TEMP.FULL = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygInstructioncode)
+        V.VC.CNT = DCOUNT(V.VC.TEMP.FULL,@VM)
+        IF V.VC.CNT GT '6' THEN
+            AF = PP.OEYG.InstructionCode
+            AV = V.VC.CNT
+            TEXTERR = 'PP-OE.TAG.72.ERR.BOE'
+            ETEXT = TEXTERR
+            CALL STORE.END.ERROR
+        END
+*    END
+    RETURN
+
+
+END

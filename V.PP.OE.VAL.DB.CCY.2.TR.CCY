@@ -1,0 +1,48 @@
+*-----------------------------------------------------------------------------
+* <Rating>0</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.VAL.DB.CCY.2.TR.CCY
+*====================================================================================
+* NAME: V.PP.OE.VAL.DB.CCY.2.TR.CCY
+* PROGRAMMER: Manikandan
+* DATE: 07/04/20
+* TECHNICAL DESCRIPTION:
+*           This Version Subroutine is designed to validate the currency should be in EUR/USD in Outgoing Call Transfer 103/202 USD/EUR payments.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*     N/A
+*====================================================================================
+* INSERTS
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.EB.ERROR
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.ACCOUNT
+    V_DEBIT.ACC.ID = COMI
+
+    FN.ACCOUNT = 'F.ACCOUNT'
+    F.ACCOUNT = ''
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    CALL F.READ(FN.ACCOUNT,V_DEBIT.ACC.ID,R.ACCOUNT,F.ACCOUNT,ER.ACCOUNT)
+
+    IF R.ACCOUNT THEN
+
+        V_CURRENCY = R.ACCOUNT<AC.CURRENCY>
+
+        R.NEW(PP.OEYG.TransactionCurrency) = V_CURRENCY
+    END
+    IF V_CURRENCY EQ 'USD' OR V_CURRENCY EQ 'EUR' THEN
+        AF = PP.OEYG.DebitAccountNumber
+        AV = 1
+        ETEXT = "Invalid Transaction Currency Entered -":V_CURRENCY:"Currency Should be in EUR or USD"
+        CALL STORE.END.ERROR
+    END
+    RETURN
+END

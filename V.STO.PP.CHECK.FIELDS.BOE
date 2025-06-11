@@ -1,0 +1,578 @@
+*-----------------------------------------------------------------------------
+* <Rating>1283</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STO.PP.CHECK.FIELDS.BOE
+*=========================================================================================
+* NAME: V.STO.PP.CHECK.FIELDS.BOE
+*       P103 - Make CHAPS payment
+*
+* PROGRAMMER: Richard Kalas (Temenos)
+*
+* DATE: 26/10/2001
+*
+* DESCRIPTION:
+*
+*    Validation routine of fields input in STANDING.ORDER for Preformatted
+*    Payments. This routine uses similar validations as V.FT.CHAPS.CHECK.FIELDS.BOE
+*    with the following field name changes:
+*
+*      FUNDS.TRANSFER                STANDING.ORDER
+*      ==============                ==============
+*      TRANSACTION.TYPE              PAY.METHOD
+*      BEN.CUSTOMER                  BENEFICIARY
+*      BC.BANK.SORT.CODE             BANK.SORT.CODE
+*      DEBIT.AMOUNT                  CURRENT.AMOUNT.BAL
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+*       VERSION STANDING.ORDER,CHAPS.BOE
+*               STANDING.ORDER,CHAPS.BOE.OL
+*
+* CALLS:
+*       EB.LOCREF.SETUP
+*       IN2CUS
+*       CHECK.ACCOUNT.CLASS
+*       DBR
+*       STORE.END.ERROR
+*       REBUILD.SCREEN
+*       GET.NOSTRO
+*       OPF
+*       F.READ
+*       DE.VALIDATE.SWIFT.ADDRESS
+*
+* CHANGE HISTORY:
+*
+* GLOB703 - 23/8/07 - Simon Laraman
+*                     Provide a message explaining which messages will
+*                     be generated
+*
+* T24-387 - 6/11/07 - GDT - Target 2 Project
+*
+* CR T24-689 - R11-UPGRADE CHANGES - NP20120327
+* Call to REM will not work in BROWSER, So the code is converted for
+* BROWSER so REM is replaced with a call to DISPLAY.MESSAGE
+*
+* ==========================================
+*
+* Target 2 - David Schwodler 18/10/07
+* routine to remove all references to the local NCB.BIC.BOE table;
+* removing the insert and the DBR and where it sets up the STO.REC.CORR.BANK field.
+* Add insert file I_COMMON.BOE for the BIC codes and make sure the correct one is used depending on currency.
+*
+* PT20071031.1        Patrick Torto 31/10/07
+*                     ensure that ORDERING.CUST is always populated with the Customer ID
+*                     of the Account making the Standing Order.
+*                     This is done purely for the use of USER.EXTERNAL.FIELDS as the
+*                     ORDERING.CUST field is the only field available to be used within
+*                     USER.EXTERNAL.FIELDS. BOE does not use the ORDERING.CUST field from
+*                     STANDING.ORDER for actual Payments.
+*                     Instead the ORDERING.CUST field is derived automatically in FT payments.
+*                     1) Add a DBR in the INITIALISE section to get the Cust ID.
+*                     2) Apply the Cust ID to the ORDERING.CUST field when the field is
+*                     validated.
+*                     3) To ensure validation, add the ORDERING.CUST field to all
+*                     OLL Versions for STANDING.ORDER against this subroutine.
+*
+*
+* Imported T24-409 in 6/11/07 for Target 2
+* ========================================
+* This was R5V3 rework that was implemented 19/10/07
+* DL.DEFINE>BKOE001-T24.R5.02800
+* It was unnecessary to modify the versions from AUTO.NEW.CONTENT
+* to FIELD.VALIDATION
+* VERSION>STANDING.ORDER,CHAPS.EUR.BOE.OL
+* VERSION>STANDING.ORDER,CHAPS.GBP.BOE.OL
+*
+* T24-409 - 10/10/07 - Simon Laraman
+*                      When GOLL validates an OFS message, the status of
+*                      MESSAGE is "VAL".  This meant that data (in this
+*                      case, BIC codes) didn't get enriched.  When the
+*                      returned message is provided, the BIC fields are
+*                      empty.  This change will make sure if a message
+*                      is coming from OFS, it will enrich the data only if
+*                      the message is for "VALIDATE".  Then the return
+*                      message will have the full BIC.
+*                      e.g. MARKDETG will become MARKDETGXXX rather then
+*                      NULL if Globus cannot validate the BIC code on
+*                      DE.BIC.Calls from Desktop should function as before
+*
+* T24-689 - 19/03/12 - Kirk London (R11 Upgrade)
+* Removed multiple DBR's and replaced with F.READ
+*
+* T24-705 - 12/04/2012 - Mark Ronsley (R11 Upgrade)
+* Amendment to related VERSION routines to allow for Browser conversion for R11 Upgrade.
+
+* T24-706 - 04/09/12 - Rob Webb (R11 Upgrade - TOLL)
+* Fundamental re-write to align (as much as possible) with V.FT.CHAPS.CHECK.FIELDS.BOE processing.
+* This was necessary to resolve major incompatibility issues with T24 Browser and T24 WS compatability.
+* The sheer volume of these changes was not condusive to line be line code comments so these have been ommitted.
+*
+* Highlights:
+*
+* Invalid use of R.NEW() and setting of COMI has been removed throughout.
+* $INSERTS and flow of main code section standardised with V.FT.CHAPS.CHECK.FIELDS.BOE
+* Flow of VALIDATE.SORT.CODE has been standardised with V.FT.CHAPS.CHECK.FIELDS.BOE
+* Legacy GOSUB VALIDATE.BIC has been decomissioned and GOSUB VALIDATE.SWIFT has been amended to
+* call VALIDATE.BIC.BOE to standardise SWIFT BIC validations.
+* All code changes made for T24-705 have been removed as none were necessary as a result of above changes!
+*
+* T24 UPG-17741 - Kavitha Srinivasan - 19 OCT 2012
+* Changes done to show the enrichments in Browser
+
+*=========================================================================================
+*=========================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_COMMON.BOE      ;*Bank of England Common Block RW20120903
+    $INSERT I_F.FUNDS.TRANSFER
+    $INSERT I_F.STANDING.ORDER
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+    $INSERT I_F.MNEMONIC.CUSTOMER
+    $INSERT I_F.DE.BIC.PARAMETER
+    $INSERT I_F.DE.BIC
+    $INSERT I_F.DE.ADDRESS
+    $INSERT I_F.AGENCY
+    $INSERT I_F.BC.SORT.CODE
+    $INSERT I_F.VERSION
+    $INSERT I_F.FT.LOCAL.CLEARING
+    $INSERT I_F.FT.BC.PARAMETER
+    $INSERT I_FT.LOCAL.COMMON
+    $INSERT I_F.FT.TAPE.PARAMS
+    $INSERT I_F.OFS.SOURCE
+    $INSERT I_GTS.COMMON      ;*RW20120903
+*=========================================================================================
+
+    GOSUB INITIALISE
+
+    GOSUB LOCAL.REF.SETUP
+
+    IF R.NEW(STO.PAY.METHOD)[1,2] = 'OT' THEN
+        IF MESSAGE = C$BOE.VAL AND AF = STO.PAY.METHOD THEN ;*MESSAGE = 'VAL'
+            GOSUB STO.CROSS.VAL
+        END ELSE
+
+            GOSUB STO.CHECK.FIELDS
+        END
+    END ELSE
+*  if the message is not only for validation
+*        GOSUB STO.CHECK.FIELDS
+
+    END
+
+    IF ETEXT NE "" THEN
+        CALL STORE.END.ERROR
+    END
+
+
+* T24-409 End
+    IF NOT(GTSACTIVE) THEN
+        CALL REBUILD.SCREEN
+    END
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+INITIALISE:
+
+    V_AC.CCY = ''   ;* Currency Variable
+    V_PREFIX = 'SW-'          ;* Swift code prefix
+    V_LEN_PREFIX = LEN(V_PREFIX)
+
+* Read details from the FT.LOCAL.CLEARING application SYSTEM record.
+* FT.LC.CLEARING.ID.CODE points to the field CLEARING.ID.CODE containing
+* 'SC' for UK Sort Code at implementation.
+
+    CALL DBR("FT.LOCAL.CLEARING":FM:FT.LC.CLEARING.ID.CODE,'SYSTEM',V_CLEARING.CODE)
+    V_LEN.CLEARING.CODE = LEN(V_CLEARING.CODE)
+
+    V_DR.ACCT.NO = FIELD(ID.NEW,'.',1)  ;* Debit Account number
+* PT20071031.1 s
+*    CALL ACCOUNT.DBR(AC.CUSTOMER, V_DR.ACCT.NO, ID.CUST)
+
+* KL20120319.s
+* Open required files
+    FN.ACCOUNT = "F.ACCOUNT"
+    F.ACCOUNT = ""
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    FN.CUSTOMER = "F.CUSTOMER"
+    F.CUSTOMER = ""
+    CALL OPF(FN.CUSTOMER,F.CUSTOMER)
+
+    FN.DE.ADDRESS = "F.DE.ADDRESS"
+    F.DE.ADDRESS = ""
+    CALL OPF(FN.DE.ADDRESS,F.DE.ADDRESS)
+
+    R.ACCOUNT = '' ; V.AC.ERR = ''
+    CALL F.READ(FN.ACCOUNT,V_DR.ACCT.NO,R.ACCOUNT,F.ACCOUNT,V.AC.ERR)
+
+    ID.CUST = R.ACCOUNT<AC.CUSTOMER>
+
+* KL20120319.e
+
+* PT20071031.1 e
+* GLOB703 - 30/08/07 Start
+
+    YVERSION = APPLICATION:PGM.VERSION
+    BEGIN CASE
+    CASE YVERSION MATCHES "STANDING.ORDER,CHAPS.BOE":VM:"STANDING.ORDER,TGT2.BOE"
+        YVALID.VERSION = 1
+    CASE 1
+        YVALID.VERSION = 0
+    END CASE
+
+* GLOB703 - 30/08/07 End
+    EQU TRUE TO 1, FALSE TO 0
+
+* DS 18/10/07 - start
+* Read environment from environment variables.
+* If not the live-environment accept trialing BIC codes in message header.
+
+    IF GETENV('glbenv',V_GLBENV) THEN
+        IF V_GLBENV = 'lglb' THEN
+            V_LIVE = TRUE
+        END ELSE
+            V_LIVE = FALSE
+        END
+    END ELSE
+        V_LIVE = FALSE
+    END
+
+* Setup BOE BIC codes
+
+    IF V_LIVE = TRUE THEN
+        V_CORR.BIC = C$BOE.CORR.BIC
+        V_PAYMENT.BIC = C$BOE.PAYMENT.BIC
+    END ELSE
+
+* If environment is not 'live' allow for test BICs
+* KL20120319.s
+
+        ID.DE.ADDRESS.1 = ID.COMPANY:".SWIFT.1"
+        ID.DE.BIC.1 = ''
+        R.DE.ADDRESS.1 = ""  ;  V.DE.ERR = ""
+        CALL F.READ(FN.DE.ADDRESS,ID.DE.ADDRESS.1,R.DE.ADDRESS.1,F.DE.ADDRESS,V.DE.ERR)
+        V_CORR.BIC = R.DE.ADDRESS.1<DE.ADD.DELIVERY.ADDRESS>[1,8]
+
+        ID.DE.ADDRESS.2 = ID.COMPANY:".SWIFT.2"
+        ID.DE.BIC.2 = ''
+        R.DE.ADDRESS.2 = ""  ;  V.DE.ERR = ""
+        CALL F.READ(FN.DE.ADDRESS,ID.DE.ADDRESS.2,R.DE.ADDRESS.2,F.DE.ADDRESS,V.DE.ERR)
+        V_PAYMENT.BIC = R.DE.ADDRESS.2<DE.ADD.DELIVERY.ADDRESS>[1,8]
+    END
+
+    RETURN
+* KL20120319.e
+*-----------------------------------------------------------------------------
+*
+LOCAL.REF.SETUP:
+
+* Call to EB.LOCREF.SETUP returns an array of local reference fieldnames in the
+* correct order they appear on the application.
+
+    V_LR.FIELD = ""
+    V_LR.APP = 'STANDING.ORDER'         ;* Change the application ID.
+
+    V_LR.FIELD = 'ORD.BANK'   ;* Change to the field name required
+    CALL GET.LOC.REF(V_LR.APP, V_LR.FIELD,V_LR.STO.ORD.BANK)
+
+* Read in BC.SORT.CODE local references
+
+    V_LR.FIELD = ""
+    V_LR.APP = 'BC.SORT.CODE' ;* Change the application ID.
+
+    V_LR.FIELD = 'CHAPS.BIC.CODE'
+    CALL GET.LOC.REF(V_LR.APP, V_LR.FIELD,V_LR.BSC.CHAPS.BIC.CODE)
+
+    V_LR.FIELD = 'GBP.BIC.CODE'
+    CALL GET.LOC.REF(V_LR.APP, V_LR.FIELD,V_LR.BSC.GBP.BIC.CODE)
+
+    V_LR.FIELD = 'EUR.BIC.CODE'
+    CALL GET.LOC.REF(V_LR.APP, V_LR.FIELD,V_LR.BSC.EUR.BIC.CODE)
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+STO.CHECK.FIELDS:
+
+    BEGIN CASE
+
+* Different from V.FT.CHAPS.CHECK.FIELDS which works out Nostro from the Debit Acct no.
+* With STANDING.ORDER the debit acct no is in the ID. Therefore validate on amount.
+
+    CASE AF = STO.LOCAL.REF
+        BEGIN CASE
+        CASE AV = V_LR.STO.ORD.BANK     ;* ORD.BANK
+            IF COMI NE "" THEN
+                BEGIN CASE
+                CASE AS > 4
+                    ETEXT = "MUST NOT EXCEED 4 LINES"
+
+                CASE AS = 1
+                    IF LEN(COMI) < 15 THEN
+                        IF NOT(NUM(COMI)) THEN
+                            GOSUB VALIDATE.SWIFT
+                            ETEXT = ''
+                        END
+                        IF COMI.ENRI = '' THEN
+
+* IN2CUS is the standard GLOBUS input routine for a customer. Here it is
+* used to validate that COMI is passing a valid customer number.
+* Syntax: IN2CUS(n1,t1)
+* n1 = a) No max chars
+*      b) '.'
+*      c) No min chars
+* t1 = Field1 = 'CUS'
+*      Field5 = '' or 'R' (when right justified)
+*
+* For more information see the GLOBUS Developers guide.
+
+                            CALL IN2CUS('16.1','CUS')
+                            IF ETEXT = '' THEN
+                                CALL CHECK.ACCOUNT.CLASS ( "BANK", "",COMI,"",V_RETURN.CODE)
+                                IF V_RETURN.CODE NE 'YES' THEN
+                                    ETEXT = 'INPUT IS NOT A BANK'
+                                END ELSE
+                                    R.CUSTOMER = ""  ;  V.CU.ERR = "" ;* KL20120319.s
+                                    CALL F.READ(FN.CUSTOMER,COMI,R.CUSTOMER,F.CUSTOMER,V.CU.ERR)
+                                    COMI.ENRI = R.CUSTOMER<EB.CUS.SHORT.NAME>   ;* KL20120319.e
+* T24 UPG-17741 Start
+                                    IF OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION' THEN
+                                        OFS$ENRI<AF,AV,AS> = COMI.ENRI
+                                    END
+* T24 UPG-17741 End
+                                END
+                            END ELSE
+                                ETEXT = ''        ;* Free format
+                            END
+                        END
+                    END
+                CASE 1
+                END CASE
+            END ELSE
+* If the currency is Euro or GBP then the Bic Codes held in I_COMMON.BOE must be defaulted, any other currency will
+* subject to the previous checks.
+*
+                BEGIN CASE
+                CASE R.NEW(STO.CURRENCY) = "GBP"
+                    COMI = V_PAYMENT.BIC:"XXX"
+                    GOSUB VALIDATE.SWIFT
+                    R.NEW(STO.LOCAL.REF)<1,V_LR.STO.ORD.BANK> = COMI
+                CASE R.NEW(STO.CURRENCY) = "EUR"
+                    COMI = V_CORR.BIC:"XXX"
+                    GOSUB VALIDATE.SWIFT
+                    R.NEW(STO.LOCAL.REF)<1,V_LR.STO.ORD.BANK> = COMI
+                END CASE
+            END
+        CASE 1
+* No default
+        END CASE
+
+    CASE AF = STO.ACCT.WITH.BANK
+
+        IF (COMI[1,V_LEN.CLEARING.CODE] = V_CLEARING.CODE AND NUM(COMI[1+V_LEN.CLEARING.CODE,6]) AND AV = 1) OR (COMI[1,2+V_LEN.CLEARING.CODE] = '//':V_CLEARING.CODE AND NUM(COMI[5,6]) AND AV = 1) THEN
+            GOSUB VALIDATE.SORT.CODE
+        END ELSE
+            IF AV = 1 THEN
+                GOSUB VALIDATE.SWIFT
+            END
+        END
+
+    CASE AF = STO.BENEFICIARY ;* validate but don't force
+
+        IF AV = 1 THEN
+            GOSUB VALIDATE.SWIFT
+        END
+
+    CASE AF = STO.BEN.BANK
+
+        IF (COMI[1,V_LEN.CLEARING.CODE] = V_CLEARING.CODE AND NUM(COMI[1+V_LEN.CLEARING.CODE,6]) AND AV = 1) OR (COMI[1,2+V_LEN.CLEARING.CODE] = '//':V_CLEARING.CODE AND NUM(COMI[5,6]) AND AV = 1) THEN
+            GOSUB VALIDATE.SORT.CODE
+        END ELSE
+            IF AV = 1 THEN
+                GOSUB VALIDATE.SWIFT
+            END
+        END
+
+    CASE AF = STO.INTERMED.BANK
+
+        IF (COMI[1,V_LEN.CLEARING.CODE] = V_CLEARING.CODE AND NUM(COMI[1+V_LEN.CLEARING.CODE,6]) AND AV = 1) OR (COMI[1,2+V_LEN.CLEARING.CODE] = '//':V_CLEARING.CODE AND NUM(COMI[5,6]) AND AV = 1) THEN
+            GOSUB VALIDATE.SORT.CODE
+        END ELSE
+            IF AV = 1 THEN
+                GOSUB VALIDATE.SWIFT
+            END
+        END
+
+    CASE AF = STO.CURRENCY
+
+        GOSUB VALIDATE.CURRENCY
+
+* PT20071031.1 s
+    CASE AF = STO.ORDERING.CUST
+        COMI = ID.CUST
+        R.NEW(STO.ORDERING.CUST) = ID.CUST
+* PT20071031.1 e
+
+    CASE 1
+
+* No validation on other fields.
+
+    END CASE
+
+*    IF ETEXT NE "" THEN
+*        CALL STORE.END.ERROR
+*    END
+
+*    CALL REBUILD.SCREEN
+
+    RETURN
+*
+*----------------------------------------------------------------------------
+*
+DEFAULT.NOSTRO:
+* Get NOSTRO account for customer
+
+    V_NOSTRO.ACCT = ''
+    V_RETURN.CODE = ''
+
+    CALL GET.NOSTRO(V_AC.CCY,'FT','',V_TXN.TYPE,'','',V_NOSTRO.ACCT,'','',V_RETURN.CODE,'')
+
+    IF V_RETURN.CODE = 0 OR V_RETURN.CODE = 1 THEN
+        R.NEW(STO.CPTY.ACCT.NO)=V_NOSTRO.ACCT
+    END ELSE
+        ETEXT = 'NOSTRO ACCOUNT NOT AVAILABLE'
+    END
+    RETURN
+
+*-----------------------------------------------------------------------------
+*
+VALUE.DATE:
+* Validate Value Date
+
+
+    IF R.NEW(STO.PAY.METHOD)[1,2] = 'OT' THEN
+
+        IF COMI = '' THEN
+            COMI = TODAY
+        END
+    END   ;* TRANSACTION.TYPE = 'OT'
+
+    RETURN
+*================================================================================
+
+VALIDATE.CURRENCY:
+* If change in currency set the Nostro to the new currency
+    IF COMI NE R.NEW(STO.CURRENCY) THEN
+        R.NEW(STO.CURRENCY) = COMI
+        V_AC.CCY = COMI
+        V_TXN.TYPE = R.NEW(STO.PAY.METHOD)
+        GOSUB DEFAULT.NOSTRO
+    END
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+VALIDATE.SORT.CODE:
+* If input is prefixed with SC or //SC then assume it is a sortcode and validate it.
+* Check that the sort code is not the bank sort code. This will be the first sort
+* code set on the Local clearing record.
+
+    IF COMI NE '' THEN
+        IF R.NEW(STO.CURRENCY) = 'GBP' THEN
+
+            FN.BC.SORT.CODE = 'F.BC.SORT.CODE'
+            F.BC.SORT.CODE = ''
+            R.BC.SORT.CODE = ''
+            ID.BC.SORT.CODE = ''
+            CALL OPF(FN.BC.SORT.CODE,F.BC.SORT.CODE)
+
+            BEGIN CASE
+            CASE COMI[1,2+V_LEN.CLEARING.CODE] = '//':V_CLEARING.CODE
+                ID.BC.SORT.CODE = COMI[3+V_LEN.CLEARING.CODE,LEN(COMI)-2+V_LEN.CLEARING.CODE]
+            CASE COMI[1,1+V_LEN.CLEARING.CODE] = '/':V_CLEARING.CODE
+                ID.BC.SORT.CODE = COMI[2+V_LEN.CLEARING.CODE,LEN(COMI)-1+V_LEN.CLEARING.CODE]
+            CASE COMI[1,V_LEN.CLEARING.CODE] = V_CLEARING.CODE
+                ID.BC.SORT.CODE = COMI[1+V_LEN.CLEARING.CODE,LEN(COMI)-V_LEN.CLEARING.CODE]
+            CASE 1
+                ID.BC.SORT.CODE = COMI
+            END CASE
+
+            LOCATE ID.BC.SORT.CODE IN FTLC$LOCAL.CLEARING(FT.LC.BC.CODE)<1,1> SETTING CODE.POS THEN
+                ETEXT = 'SORT CODE CANNOT BE BANK OF ENGLAND'
+            END ELSE
+
+                CALL F.READ(FN.BC.SORT.CODE,ID.BC.SORT.CODE,R.BC.SORT.CODE,F.BC.SORT.CODE,V_ER)
+                IF V_ER = '' THEN
+* If a branch BI exists populate this in line 2.
+                    V_TOLL.CHAPS.VERSIONS = ""
+                    V_TOLL.CHAPS.VERSIONS = ",CHAPS.GBP.BOE.TOLL"
+                    IF PGM.VERSION MATCHES V_TOLL.CHAPS.VERSIONS OR (NOT(PGM.VERSION MATCHES V_TOLL.CHAPS.VERSIONS) AND R.NEW(AF)<1,2> = "") THEN
+* If a branch BIC exists populate this in line 2.
+                        IF R.BC.SORT.CODE<EB.BSC.LOCAL.REF,V_LR.BSC.CHAPS.BIC.CODE> NE '' THEN
+                            R.NEW(AF)<1,2> = R.BC.SORT.CODE<EB.BSC.LOCAL.REF,V_LR.BSC.CHAPS.BIC.CODE>
+                        END ELSE
+* Place name and address in line 2.
+                            R.NEW(AF)<1,2> = R.BC.SORT.CODE<EB.BSC.NAME>
+                        END
+                        CALL REFRESH.FIELD(AF:'.':2,'')
+                    END
+
+                    COMI = '//':V_CLEARING.CODE:ID.BC.SORT.CODE
+                    COMI.ENRI = R.BC.SORT.CODE<EB.BSC.NAME>
+* T24 UPG-17741 Start
+                    IF OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION' THEN
+                        OFS$ENRI<AF,AV,AS> = COMI.ENRI
+                    END
+* T24 UPG-17741 End
+
+                END ELSE
+                    ETEXT = 'SORTCODE NOT ON BC.SORT.CODE'
+                END
+
+            END
+
+        END ELSE
+            ETEXT = 'CURRENCY IS NOT GBP'
+        END
+    END
+
+    RETURN
+*
+*=================================================================
+STO.CROSS.VAL:
+* Cross-validation:
+* GLOB703 - 23/8/07 - Start
+    BEGIN CASE
+    CASE NOT(R.NEW(STO.BEN.BANK)) AND R.NEW(STO.BENEFICIARY) AND AF = STO.BEN.BANK AND YVALID.VERSION
+        TEXT = "A MT103 WILL BE GENERATED"
+        CALL DISPLAY.MESSAGE(TEXT,'')   ;* CR T24-689 - NP20120327
+
+
+    CASE R.NEW(STO.BEN.BANK) AND NOT(R.NEW(STO.BENEFICIARY)) AND AF = STO.BENEFICIARY AND YVALID.VERSION
+        TEXT = "A MT202 WILL BE GENERATED"
+        CALL DISPLAY.MESSAGE(TEXT,'')   ;* CR T24-689 - NP20120327
+
+* GLOB703 - 23/8/07 - End
+    CASE 1
+
+    END CASE
+    RETURN
+*=================================================================
+VALIDATE.SWIFT:
+    CALL VALIDATE.BIC.BOE
+
+    IF COMI[1,3] EQ V_PREFIX THEN       ;*Remove 'SW-' Enrichment should this be populated.
+        COMI = COMI[4,LEN(COMI)-3]
+    END
+
+    ETEXT = ""      ;* Clear as only the enrichment is required
+
+    RETURN
+*=================================================================
+END

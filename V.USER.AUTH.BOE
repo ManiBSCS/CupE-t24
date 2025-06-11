@@ -1,0 +1,115 @@
+*-----------------------------------------------------------------------------
+* <Rating>112</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.USER.AUTH.BOE
+*-----------------------------------------------------------------------------
+* NAME: V.USER.AUTH.BOE
+*
+* PROGRAMMER: RONALDO DEOCAMPO
+*
+* DATE: 14/06/2012
+*
+* DESCRIPTION:
+*         This routine is designed to update DN.CUSTOMER to store the USER.SWIFT.DN ID
+*         used by portal USER.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*         CR-706
+*
+* CALLED BY:
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*-----------------------------------------------------------------------------*
+* Insert data:
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.USER
+
+    $INSERT I_COMMON.BOE
+    $INSERT I_F.DN.USER
+
+*-----------------------------------------------------------------------------*
+MAIN:
+* Main routine
+    GOSUB INIT
+    GOSUB PROCESS
+
+    RETURN
+*-----------------------------------------------------------------------------*
+INIT:
+*----
+    FN.DN.USER = 'F.DN.USER' ; F.DN.USER = ''
+    CALL OPF(FN.DN.USER, F.DN.USER)
+
+    CALL GET.LOC.REF(APPLICATION, 'USER.SWIFT.DN', V_LR.SWIFT.DN)
+
+    RETURN
+
+*-----------------------------------------------------------------------------*
+PROCESS:
+*-------
+
+    AF = EB.USE.LOCAL.REF
+    AV = V_LR.SWIFT.DN
+
+    IF R.NEW(AF)<1,AV> NE R.OLD(AF)<1,AV> THEN
+        V_R.NEW.CNT = DCOUNT(R.NEW(AF)<1,AV>,SM)
+        V_R.OLD.CNT = DCOUNT(R.OLD(AF)<1,AV>,SM)
+
+*       check that there is a maximum of 5 multivalue
+        IF V_R.NEW.CNT GT 5 THEN
+            E = 'CANNOT EXCEED 5'
+            RETURN
+        END
+
+*       check for duplicates
+        FOR AS = 1 TO V_R.NEW.CNT
+            IF NOT(R.NEW(AF)<1,AV,AS>) THEN
+                E = 'EB-CANT.NULL'
+            END
+
+            NPOS = ''
+            LOCATE R.NEW(AF)<1,AV,AS> IN R.NEW(AF)<1,AV,1> SETTING NPOS THEN
+                IF AS NE NPOS THEN
+                    E = 'EB-DUPLICATE'
+                END
+            END
+        NEXT
+
+*       check if a field is removed
+*       this is done to remove the dn.user record of the removed field
+        FOR AS = 1 TO V_R.OLD.CNT
+            NPOS = ''
+            LOCATE R.OLD(AF)<1,AV,AS> IN R.NEW(AF)<1,AV,1> SETTING NPOS ELSE
+*               delete record of the changed user.swift.nd
+                CALL F.DELETE(FN.DN.USER, R.OLD(AF)<1,AV,AS>)
+            END
+        NEXT
+
+        FOR AS = 1 TO V_R.NEW.CNT
+            NPOS = ''
+            LOCATE R.NEW(AF)<1,AV,AS> IN R.OLD(AF)<1,AV,1> SETTING NPOS ELSE
+                R.DN.USER = ''
+                CALL F.READ(FN.DN.USER, R.NEW(AF)<1,AV,AS>, R.DN.USER, F.DN.USER, '')
+                IF R.DN.USER AND ID.NEW NE R.DN.USER<DN.USE.USER.ID> THEN
+*                   this error should not be encountered because it is handled in the field validation
+*                   but for assurance we are checking again
+                    E = 'EB-REC.ID.ALREADY.USED'
+
+                END ELSE
+*                   write new user.swift.nd
+                    R.DN.USER<DN.USE.USER.ID> = ID.NEW
+                    R.DN.USER<DN.USE.SIGN.ON.NAME> = R.NEW(EB.USE.SIGN.ON.NAME)
+                    CALL F.WRITE(FN.DN.USER, R.NEW(AF)<1,AV,AS>, R.DN.USER)
+                END
+            END
+        NEXT
+    END
+
+    RETURN
+
+*-----------------------------------------------------------------------------*
+END

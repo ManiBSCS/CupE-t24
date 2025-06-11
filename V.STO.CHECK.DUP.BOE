@@ -1,0 +1,107 @@
+*-----------------------------------------------------------------------------
+* <Rating>-26</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STO.CHECK.DUP.BOE
+*********************************************************
+* NAME:       V.STO.CHECK.DUP.BOE
+* PROGRAMMER: Kavitha Srinivasan      DATE: 13/11/2015
+* DEVELOPMENT REF : T24 CR 984
+*
+* DESCRIPTION:
+**************
+* This routine will check for identical Standing Orders for the same customer
+* and will throw an error if there are any Standing Orders exists with same
+* Debit Account, Beneficiary Account and Beneficiary Reference.
+*
+* CHANGE REQUEST:
+*****************
+*
+* CALLED BY:
+************
+* VERSION -  STANDING.ORDER,BACS.BOE,  STANDING.ORDER,CONTRA.BOE
+*
+* CALLS:
+********
+* OPF, STORE.END.ERROR, F.READ, EB.READLIST
+*
+* CHANGE HISTORY:
+*****************
+*
+**********************************************************
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.STANDING.ORDER
+
+    GOSUB INITIALISE
+    GOSUB CHECK.STO.RECORDS
+
+    IF ETEXT THEN
+        CALL STORE.END.ERROR
+    END
+
+    RETURN
+
+*
+*-----------------------------------------------------------------------------
+*
+INITIALISE:
+*
+*-----------------------------------------------------------------------------
+
+* Open STANDING ORDER file for read
+    FN.STANDING.ORDER = "F.STANDING.ORDER"
+    F.STANDING.ORDER = ""
+    CALL OPF(FN.STANDING.ORDER,F.STANDING.ORDER)
+
+    V.CURRENT.STO.ID = ""
+    V.PAYMENT.DETAILS = ""
+    V.BEN.ACCT.NO = ""
+    V.ACCT.NO = ""
+    V.CPTY.ACCT.NO = ""
+
+    RETURN
+
+
+*
+*-----------------------------------------------------------------------------
+*
+CHECK.STO.RECORDS:
+*
+*-----------------------------------------------------------------------------
+*
+
+* Extract the details from current STO record.
+
+    V.CURRENT.STO.ID = ID.NEW
+    V.PAYMENT.DETAILS = R.NEW(STO.PAYMENT.DETAILS)
+    V.BEN.ACCT.NO = R.NEW(STO.BEN.ACCT.NO)
+    V.ACCT.NO = FIELD(V.CURRENT.STO.ID,".",1)
+    V.CPTY.ACCT.NO = R.NEW(STO.CPTY.ACCT.NO)
+
+* Check for identical Standing Orders for the same customer account
+* and throw an error if there are any Standing Orders exists with same
+* Debit Account, Beneficiary Account and Beneficiary Reference.
+
+    V.CMD = "SSELECT ":FN.STANDING.ORDER:" WITH K.TYPE EQ 'FI'"
+    V.CMD := " AND @ID NE '":V.CURRENT.STO.ID:"'"
+    V.CMD := " AND ACCT.NO EQ '":V.ACCT.NO:"'"
+    V.CMD := " AND BEN.ACCT.NO EQ '":V.BEN.ACCT.NO:"'"
+    V.CMD := " AND PAYMENT.DETAILS EQ '":V.PAYMENT.DETAILS:"'"
+    V.CMD := " AND CPTY.ACCT.NO EQ '":V.CPTY.ACCT.NO:"'"
+
+    V.SO.LIST = "" ; V.LISTNAME = "" ; V.SEL = "" ; V.ER = ""
+    CALL EB.READLIST(V.CMD,V.SO.LIST,V.LISTNAME,V.SEL,V.ER)
+
+    IF V.SEL GT 0 THEN
+        ETEXT = "Identical Standing Order exists for this account."
+    END
+
+    RETURN
+
+*
+*-----------------------------------------------------------------------------
+*
+
+* End of the routine
+END

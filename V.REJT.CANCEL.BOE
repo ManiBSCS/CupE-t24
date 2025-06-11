@@ -1,0 +1,52 @@
+*-----------------------------------------------------------------------------
+* <Rating>-20</Rating>
+*-----------------------------------------------------------------------------
+SUBROUTINE V.REJT.CANCEL.BOE
+
+$INSERT I_F.POR.SUPPLEMENTARY.INFO
+$INSERT I_F.PP.ORDER.ENTRY
+$INSERT I_EQUATE
+$INSERT I_COMMON
+
+
+*DEBUG
+GOSUB INITIALISE
+GOSUB PROCESS
+
+RETURN
+
+
+INITIALISE:
+
+FN.POR.SUPPLEMENTARY.INFO = "F.POR.SUPPLEMENTARY.INFO"
+F.POR.SUPPLEMENTARY.INFO = ""
+CALL OPF(FN.POR.SUPPLEMENTARY.INFO,F.POR.SUPPLEMENTARY.INFO)
+
+FTNumber = R.NEW(PP.OEYG.TransactionReferenceNumber)
+CancelDesc = R.NEW(PP.OEYG.CancelDescription)
+
+CALL F.READ(FN.POR.SUPPLEMENTARY.INFO,FTNumber,R.POR.SUPPLEMENTARY.INFO,F.POR.SUPPLEMENTARY.INFO,ER.DATA)
+INS.CODE = R.POR.SUPPLEMENTARY.INFO<PORID.PI.INSTRUCTION.CODE>
+TEXT = ""
+RETURN
+
+
+PROCESS:
+
+IF INS.CODE EQ "REJT" THEN
+        IF CancelDesc EQ "" THEN
+                ETEXT = "REP.REJT.CANCEL.BOE"
+                AF = PP.OEYG.CancelDescription
+                TEXT = ETEXT
+                CURR.NO = 1
+        END
+
+END
+
+IF TEXT NE "" THEN
+    CALL STORE.OVERRIDE(CURR.NO)
+END
+
+RETURN
+
+END

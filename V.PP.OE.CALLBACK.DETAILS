@@ -1,0 +1,83 @@
+*-----------------------------------------------------------------------------
+* <Rating>95</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.CALLBACK.DETAILS
+*
+*-----------------------------------------------------------------------------
+* NAME: V.PP.OE.CALLBACK.DETAILS
+*
+* PROGRAMMER: Manikandan (TEMENOS)
+*
+* DATE: 07/01/2020
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This Validation routine is used by the version.control  record to validate input
+*       in local reference field <1,1> against the transaction amount GT 1000 GBP and raise an error
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION'S - PP.ORDER.ENTRY,CTR.OUT.CREATE.CAM.BOE,PP.ORDER.ENTRY,BTR.OUT.CREATE.CAM.BOE
+*
+*
+*-----------------------------------------------------------------------------
+    $PACKAGE PP.SwiftOutService
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_PaymentFrameworkService_PORHistoryLog
+    $INSERT I_FXService_FXinMidRate
+    $INSERT I_FXService_FXoutMidRate
+    IF V$FUNCTION EQ 'R' THEN RETURN    ;* If its reversal process will be return
+
+    IF V$FUNCTION EQ 'I' THEN
+* Capturing Call Back details in SWIFT &Chaps OE screen
+        FIELDPOS=''
+        CALL GET.LOC.REF("PP.ORDER.ENTRY","CALLBACKDETAILS",FIELDPOS)
+        Y.GPO.DETAILS= R.NEW(PP.OEYG.LOCAL.REF)<1,FIELDPOS>
+
+        Y.TRANS.AMOUNT=R.NEW(PP.OEYG.TransactionAmount)
+        Y.CURRENCY = R.NEW(PP.OEYG.TransactionCurrency)
+
+        AF=PP.OEYG.LOCAL.REF
+        AV=FIELDPOS
+        AS=1
+
+        IF Y.CURRENCY EQ 'GBP' THEN
+            IF Y.GPO.DETAILS EQ '' AND Y.TRANS.AMOUNT GE '1000' THEN
+                ETEXT = 'PP-OE.CALLBACK.ERR'
+                CALL STORE.END.ERROR
+            END
+        END ELSE    ;* for any FCY currency it will convert the amount to GBP currency
+            iFXinMidRate<FXinMidRate.fromCurrency> = Y.CURRENCY
+            iFXinMidRate<FXinMidRate.fromAmount> = Y.TRANS.AMOUNT
+            iFXinMidRate<FXinMidRate.toCurrency> = 'GBP'
+            iFXinMidRate<FXinMidRate.companyID> = 'BNK'
+            iFXinMidRate<FXinMidRate.market> = '1'
+
+            CALL FXService.calculateFXMidRate(iFXinMidRate, oFXoutMidRate, oFXMidRateResponse)
+            Y.FCY.AMOUNT=oFXoutMidRate<FXoutMidRate.toCurrencyAmount> ;*Amount converted Equivalent to its LCY currency
+            IF Y.GPO.DETAILS EQ '' AND Y.FCY.AMOUNT GE '1000' THEN
+                ETEXT = 'PP-OE.CALLBACK.ERR'
+                CALL STORE.END.ERROR
+            END
+        END
+* Capturing RSN details in SWIFT &Chaps OE screen
+        FPOS=''
+        CALL GET.LOC.REF("PP.ORDER.ENTRY","RSN.NUMBER",FPOS)
+        AF= PP.OEYG.LOCAL.REF
+        AV = FPOS
+        AS= 1
+
+        Y.RSN.DETAILS = R.NEW(PP.OEYG.LOCAL.REF)<1,FPOS>
+        IF Y.RSN.DETAILS EQ '' THEN
+            ETEXT = 'PP-OE.RSN.DETAILS.ERR'
+            CALL STORE.END.ERROR
+        END
+    END
+
+    RETURN

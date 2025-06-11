@@ -1,0 +1,77 @@
+*-----------------------------------------------------------------------------
+* <Rating>-32</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.OFS.ISO.VAL.LEI
+*
+*-----------------------------------------------------------------------------
+* NAME: V.OFS.ISO.VAL.LEI
+*
+* PROGRAMMER: Manikandan (TEMENOS)
+*
+* DATE: 15/06/2023
+*
+* TECHNICAL DESCRIPTION:
+*
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION'S - ALL OE ISO Screens-
+* Amendment History:
+*MM-16-06-2023-LEI Cross validation and population for all ISO outgoing OE screens
+*TFS-122040-Fix for No debtor LEI present in either T24 or outgoing message for NIPS
+*-----------------------------------------------------------------------------
+    $USING EB.SystemTables
+    $USING PP.OrderEntryGUI
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+
+
+    GOSUB INIT
+*     IF V$FUNCTION EQ 'I' AND Y.SOURCE EQ 'OE' AND Y.DIR EQ 'O' THEN
+*TFS-122040-S
+    *IF Y.SOURCE EQ 'OE' AND Y.DIR EQ 'R' THEN
+     IF Y.SOURCE EQ 'OE' AND (Y.DIR EQ 'R' OR Y.DIR EQ 'O') THEN
+*TFS-122040-E
+        GOSUB MAP.OE.LEI
+*         CALL V.CPD.DPD.OE.EUR.USD.BOE
+    END
+    RETURN
+
+INIT:
+    Y.SOURCE = R.NEW(PP.OEYG.Source)
+    V.DR.ACC.NUM = R.NEW(PP.OEYG.DebitAccountNumber)
+    Y.DIR = R.NEW(PP.OEYG.Direction)
+    Y.TRANSFER.TYPE = R.NEW(PP.OEYG.TransferType)
+
+    FN.ACCOUNT = 'F.ACCOUNT'
+    F.ACCOUNT = ''
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    FN.CUSTOMER = 'F.CUSTOMER'
+    F.CUSTOMER = ''
+    CALL OPF(FN.CUSTOMER,F.CUSTOMER)
+
+    RETURN
+GET.BOE.LEI:
+    CALL F.READ(FN.CUSTOMER,V_ORD_CUST,R.CUSTOMER,F.CUSTOMER,ER.CUSTOMER)
+    CALL GET.LOC.REF('CUSTOMER','LEI',LEI.POS)
+    V_BOE.LEI = R.CUSTOMER<EB.CUS.LOCAL.REF,LEI.POS>
+    RETURN
+MAP.OE.LEI:
+    R.ACCOUNT =''
+    CALL F.READ(FN.ACCOUNT,V.DR.ACC.NUM,R.ACCOUNT,F.ACCOUNT,ER.ACCOUNT)
+    IF R.ACCOUNT THEN
+        V_ORD_CUST = R.ACCOUNT<AC.CUSTOMER>
+        GOSUB GET.BOE.LEI
+        EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygDebtorLEI,V_BOE.LEI)
+
+    END
+    RETURN
+END

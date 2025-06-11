@@ -1,0 +1,60 @@
+*-----------------------------------------------------------------------------
+* <Rating>-2</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.OE.VAL.TAG.70.BOE
+
+*-----------------------------------------------------------------------------
+* NAME: V.OE.VAL.TAG.70.BOE
+*
+* PROGRAMMER: Manikandanm(TEMENOS)
+*
+* DATE: 07/01/2020
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This validation routine is used to fold % trim values  present in the tag 70 into as 4*35 values & throws an error if its exceeds
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION.CONTROL - PP.ORDER.ENTRY
+*
+*
+*-----------------------------------------------------------------------------
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_F.EB.ERROR
+    $USING PP.OrderEntryGUI
+    $USING EB.SystemTables
+
+    IF V$FUNCTION EQ 'I' THEN
+        V_PAYDIRECTION = R.NEW(PP.OEYG.Direction)
+*        IF V_PAYDIRECTION EQ 'R' OR V_PAYDIRECTION EQ 'O' THEN
+            V.PD.TEMP = EB.SystemTables.getComi()
+            IF LEN(V.PD.TEMP) GT '35' THEN
+                AF = PP.OEYG.PaymentDetails
+*AV = 1
+                TEXTERR = 'PP-OE.TAG.70.ERR1.BOE'
+                ETEXT = TEXTERR
+                CALL STORE.END.ERROR
+            END
+            V.PD.TEMP.FULL = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygPaymentdetails)
+            V.PD.CNT = DCOUNT(V.PD.TEMP.FULL,@VM)
+            IF V.PD.CNT GT '4' THEN
+                AF = PP.OEYG.PaymentDetails
+                AV = V.PD.CNT
+                TEXTERR = 'PP-OE.TAG.70.ERR.BOE'
+                ETEXT = TEXTERR
+                CALL STORE.END.ERROR
+            END
+*        END
+    END
+    RETURN
+
+
+END

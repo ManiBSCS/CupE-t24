@@ -1,0 +1,64 @@
+*-----------------------------------------------------------------------------
+* <Rating>90</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.TT.WTHD.OLD.NOTES.BOE
+*===============================================================================
+* NAME:  V.TT.WTHD.OLD.NOTES.BOE
+* PROGRAMMER:   OSENI TITILOYE (BCDIRECT)   DATE: 01/07/2010
+
+* DESCRIPTION:
+*
+* When doing any of the following transactions, T24 Teller allows cashiers to issue of old series notes:
+*         Cash a BOE Cheque;
+*          Notes and Coin Exchange;
+*          Exchange Repatriation Notes.
+
+* The old denominations cannot be blocked without effecting various teller reports/enquiries and other versions.
+* Therefore the solution is to provide a new version input routine which will check to ensure there are no 'UNITS'
+* that have been accidentally input in the 'GBP.1' or 'GBP.10.SHILL' denominations fields.
+* If there is then the routine should prevent the transaction from being committed.
+
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.TELLER
+
+    IF V$FUNCTION <> 'I' THEN RETURN
+
+    GOSUB PROCESS.RTN
+    RETURN
+
+PROCESS.RTN:
+    V_TELLER.DENOM = R.NEW(TT.TE.DENOMINATION)
+    V_TELLER.UNIT = R.NEW(TT.TE.UNIT)
+
+    V_GBP.1 = 'GBP.1'
+    V_GBP.10.SHILL = 'GBP.10.SHILL'
+    V_UNIT.VALUE = ''
+    ETEXT = ''
+    AVTEMP = ''
+
+    LOCATE V_GBP.1 IN V_TELLER.DENOM<1,1> SETTING KPOS THEN
+        V_UNIT.VALUE = V_TELLER.UNIT<1,KPOS>
+    END
+    IF V_UNIT.VALUE <> 0 AND V_UNIT.VALUE <> '' AND V_UNIT.VALUE <> '0' THEN
+        AF = TT.TE.UNIT
+        AV = KPOS
+        ETEXT = 'Invalid  Entry in GBP.1 - ZERO EXPECTED '
+        CALL STORE.END.ERROR
+    END
+
+    V_UNIT.SHILL.VALUE = ''
+    LOCATE V_GBP.10.SHILL IN V_TELLER.DENOM<1,1> SETTING JPOS THEN
+        V_UNIT.SHILL.VALUE =  V_TELLER.UNIT<1,JPOS>
+    END
+    IF V_UNIT.SHILL.VALUE <> 0 AND V_UNIT.SHILL.VALUE <> '' AND V_UNIT.SHILL.VALUE <> '0' THEN
+        AF = TT.TE.UNIT
+        AV = JPOS
+        ETEXT =  'Invalid Entry in GBP.10.SHILL - ZERO EXPECTED'
+        CALL STORE.END.ERROR
+    END
+
+    RETURN
+
+END

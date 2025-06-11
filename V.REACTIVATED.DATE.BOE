@@ -1,0 +1,128 @@
+ *-----------------------------------------------------------------------------
+* <Rating>57</Rating>
+ *-----------------------------------------------------------------------------
+     SUBROUTINE V.REACTIVATED.DATE.BOE
+ **************************************************************
+ * NAME: V.REACTIVATED.DATE.BOE
+ * PROGRAMMER: MARTIN DE HAAN (TEMENOS)  DATE: 06 NOV 2002
+ *
+ * DESCRIPTION:
+ *  Input routine for VERSION ACCT.INACTIVE.RESET,BOE
+ *  This routine will clear local reference field INACTIVE.DATE and
+ *  populate local reference field REACTIVATE.DATE with TODAY's date.
+ *
+ * TECHNICAL DESCRIPTION:
+ *
+ * CHANGE REQUEST / DEVELOPMENT REF:
+ *
+ * CALLED BY:
+ *
+ *
+ * CALLS:
+ *
+ *
+ * CHANGE HISTORY:
+ **************************************************************
+
+ **** INSERTS ****
+     $INSERT I_COMMON
+     $INSERT I_EQUATE
+     $INSERT I_F.ACCOUNT
+     $INSERT I_F.COMPANY
+     $INSERT I_F.ACCT.INACTIVE.RESET
+ **** MAIN ****
+     GOSUB INITIALISE
+
+     GOSUB UPDATE.ACCOUNT
+
+     RETURN
+ **** END OF MAIN ****
+
+
+
+ **** SUBROUTINES ****
+ INITIALISE:
+
+     FN.ACCOUNT = "F.ACCOUNT"
+     F.ACCOUNT = ""
+     CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+     V.APP<1> = "ACCOUNT"
+     V.FNAME<1,1> = "INACTIVE.DATE"
+     V.FNAME<1,2> ="REACTIVATE.DATE"
+
+     V.INACTIVE.DATE.POS = ""
+     V.REACTIVATE.DATE.POS=""
+     YLREF.POS=""
+     CALL MULTI.GET.LOC.REF(V.APP,V.FNAME,YLREF.POS)
+     V.INACTIVE.DATE.POS=YLREF.POS<1,1>
+     V.REACTIVATE.DATE.POS=YLREF.POS<1,2>
+ *V.ER = ""
+ *CALL FIND.LOCREF.POS(V.APP,V.FNAME,V.INACTIVE.DATE.POS,V.ER)
+ *IF V.ER THEN
+ *    TEXT = V.ER
+ *    PROG = "V.REACTIVATED.DATE.BOE"
+ *    CALL FATAL.ERROR(PROG)
+ *END
+
+ *V.APP = "ACCOUNT" ; V.FNAME = "REACTIVATE.DATE"
+ *    V.REACTIVATE.DATE.POS = "" ; V.ER = ""
+ *    CALL FIND.LOCREF.POS(V.APP,V.FNAME,V.REACTIVATE.DATE.POS,V.ER)
+ *    IF V.ER THEN
+ *        TEXT = V.ER
+ *        PROG = "V.REACTIVATED.DATE.BOE"
+ *        CALL FATAL.ERROR(PROG)
+ *    END
+
+     RETURN
+
+
+ UPDATE.ACCOUNT:
+
+     YINPUTTER = R.NEW(V-6)
+     DIM YR.AIR(16) ; MAT YR.AIR = "" ; YAIR.SIZE = 16
+     MAT YR.AIR = MAT R.NEW
+     YF.FILE = F.FILE
+     YF.FILE$NAU = F.FILE$NAU
+     YF.FILE$HIS = F.FILE$HIS
+     MAT R.NEW = "" ; V = AC.AUDIT.DATE.TIME
+              DIM YR.ACCOUNT(AC.AUDIT.DATE.TIME)
+     MAT YR.ACCOUNT = "" ; YACCT.SIZE = AC.AUDIT.DATE.TIME ; ETEXT = ""
+     F.ACCOUNT = "" ; CALL OPF("F.ACCOUNT",F.FILE)
+     CALL F.MATREAD("F.ACCOUNT",ID.NEW,MAT R.NEW,YACCT.SIZE,F.FILE,ETEXT)
+     IF ETEXT THEN
+         TEXT = "MISSING ACCOUNT RECORD: ":ID.NEW
+         GOTO FATAL.ERROR
+     END
+     R.NEW(AC.INACTIV.MARKER) = ""
+     R.NEW(AC.LOCAL.REF)<1,V.INACTIVE.DATE.POS> = ""
+     R.NEW(AC.LOCAL.REF)<1,V.REACTIVATE.DATE.POS> = TODAY
+     R.NEW(V-6) = YINPUTTER
+     R.NEW(V-4) = ""
+     V = AC.AUDIT.DATE.TIME
+     FULL.FNAME = "F":R.COMPANY(EB.COM.MNEMONIC):".ACCOUNT"
+     APPLICATION = "ACCOUNT"
+     CALL AUTH.AND.HIST.WRITE
+     MAT R.NEW = ""
+     MAT R.NEW = MAT YR.AIR ; V = AC.IR.AUDIT.DATE.TIME
+     R.NEW(8) = ''
+     R.NEW(V-6) = YINPUTTER
+     APPLICATION = "ACCT.INACTIVE.RESET"
+     FULL.FNAME = "F":R.COMPANY(EB.COM.MNEMONIC):".ACCT.INACTIVE.RESET"
+     F.FILE = YF.FILE
+     F.FILE$NAU = YF.FILE$NAU
+     F.FILE$HIS = YF.FILE$HIS
+
+     RETURN
+
+
+ FATAL.ERROR:
+     CALL FATAL.ERROR("ACCT.INACTIVE.RESET")
+
+     RETURN
+
+
+
+ **** END OF SUBROUTINES ****
+
+ END

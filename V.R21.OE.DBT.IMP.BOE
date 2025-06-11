@@ -1,0 +1,37 @@
+*-----------------------------------------------------------------------------
+* <Rating>-70</Rating>
+*-----------------------------------------------------------------------------
+* author : Manikandan
+*-----------------------------------------------------------------------------
+* This subroutine is to enable the field - when user manually enters the debtor address info
+*-----------------------------------------------------------------------------
+* Modification History :
+*    MM *TFS-121110 * Enabling orderpartytagoption for pacs004 screens
+*-----------------------------------------------------------------------------
+
+    SUBROUTINE V.R21.OE.DBT.IMP.BOE
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.POR.TRANSACTION
+    $INSERT I_F.CUSTOMER
+    $INSERT I_F.ACCOUNT
+    $USING EB.DataAccess
+    $USING EB.SystemTables
+    $USING PP.OrderEntryGUI
+
+    V_TransferType = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygTransfertype)
+    V_MessageType = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygIncomingmessagetype)
+    V_Direction = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygDirection)
+
+    IF V_MessageType EQ 'MXCT'  AND V_Direction EQ 'O' THEN
+        EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygOrderingidentifiercode,'')
+        EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygOrderpartytagoption,'Y')
+    END
+    IF V_MessageType EQ 'MXRT'  AND V_Direction EQ 'O' AND V_TransferType EQ 'C' THEN
+        EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygOrderingidentifiercode,'')
+        EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygOrderpartytagoption,'Y')
+    END
+
+    RETURN
+END

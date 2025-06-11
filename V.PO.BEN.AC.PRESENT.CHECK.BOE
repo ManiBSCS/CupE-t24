@@ -1,0 +1,40 @@
+*-----------------------------------------------------------------------------
+* <Rating>-1</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PO.BEN.AC.PRESENT.CHECK.BOE
+
+* Developer: Kavitha Srinivasan
+* Date: 21/10/2020
+
+* Description: Checks all FTs to ensure that the benficiary account number is present
+* when the message type is MT103.
+* Copy of V.FT.BEN.AC.PRESENT.CHECK.BOE
+*
+* Change Request/Development Ref:
+* TOLL Upgrade 2020
+*
+* Calls:
+*
+* Change History:
+*
+*-------------------------------------------------------------------------
+* BEGIN SUB CALLS
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_COMMON.BOE
+    $INSERT I_F.PAYMENT.ORDER
+
+    V_PO_BEN_ACCT = R.NEW(PO.BENEFICIARY.ACCOUNT.NO)
+    V_PO_BEN_IBAN = R.NEW(PO.BENEFICIARY.IBAN)
+* Only check further if ben account number is missing
+    IF V_PO_BEN_ACCT EQ "" AND V_PO_BEN_IBAN EQ "" THEN
+        AF = PO.BENEFICIARY.ACCOUNT.NO
+        ETEXT = C$ER.MT103.BEN.ACCT.MISSING
+        CALL STORE.END.ERROR
+    END ELSE
+        R.NEW(PO.ORDERING.CUSTOMER.BIC)="BKENGB2LXXX"
+    END
+
+*-------------------------------------------------------------------------
+END

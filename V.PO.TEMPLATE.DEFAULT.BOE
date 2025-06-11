@@ -1,0 +1,231 @@
+*-----------------------------------------------------------------------------
+* <Rating>1942</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PO.TEMPLATE.DEFAULT.BOE
+*-----------------------------------------------------------------------------
+* Functionality copied from  V.STO.FT.DEFAULT.BOE
+*
+* PROGRAMMER: KAVITHA SRINIVASAN
+* DATE: 11/07/2020
+* DESCRIPTION:
+*      VERSION routine to default information into Payment Order
+*      if a local ref field INSTRUCTION.REFERENCE is entered.
+*      It reads the the file PPT.OE.TEMPLATE  to read details
+*      of the required Payment Order
+* CHANGE REQUEST / DEVELOPMENT REF:
+* CALLED BY:
+* CALLS:
+*      REBUILD.SCREEN
+*      EB.LOCREF.SETUP
+*      ERR.BOE
+*      OPF
+*      F.READ
+*      F.MATREAD
+* CHANGE HISTORY:
+* TOLL - Upgrade 2020 - Kavitha Srinivasan - 28/07/2020
+*-----------------------------------------------------------------------------*
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PAYMENT.ORDER
+    $INSERT I_F.PPT.OE.TEMPLATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.OFS.SOURCE
+*
+    GOSUB INITIALISE
+    GOSUB LOCAL.REF.SETUP
+    IF COMI NE '' THEN
+        GOSUB OPEN.FILES      ;* Open files required by routine
+        GOSUB PROCESS.TEMPLATE          ;* Process the concat file
+        CALL REFRESH.FIELD (AF,"")
+    END
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+LOCAL.REF.SETUP:
+    V_LR.REF = ""
+    V_LR.APP<1>='PPT.OE.TEMPLATE'
+    V_LR.APP<2>='PAYMENT.ORDER'
+    V_LR.FIELD<1,1>='DR.NARRATIVE'
+    V_LR.FIELD<1,2>='CR.NARRATIVE'
+    V_LR.FIELD<2,1>='INSTRUCTION.REF'
+    V_LR.FIELD<2,2>='DR.NARRATIVE'
+    V_LR.FIELD<2,3>='CR.NARRATIVE'
+    V_LR.FIELD<2,4>='BOE.ORD.BANK'
+    V_LR.FIELD<2,5>='ORD.ACC.BOE'
+    CALL MULTI.GET.LOC.REF(V_LR.APP,V_LR.FIELD,V_LR.REF)
+
+    V_LR.POT.DR.NARRATIVE=V_LR.REF<1,1>
+    V_LR.POT.CR.NARRATIVE=V_LR.REF<1,2>
+    V_LR.PO.INSTRUCTION.REF=V_LR.REF<2,1>
+    V_LR.PO.DR.NARRATIVE=V_LR.REF<2,2>
+    V_LR.PO.CR.NARRATIVE=V_LR.REF<2,3>
+    V_LR.PO.BOE.ORD.BANK=V_LR.REF<2,4>
+    V_LR.PO.ORD.ACC.BOE=V_LR.REF<2,5>
+
+    RETURN
+*================================================================================
+INITIALISE:
+* Initialise variables used with routine
+    DIM R.PPT.OE.TEMPLATE(C$SYSDIM)
+    RETURN
+*================================================================================
+OPEN.FILES:
+* Open files required by routine
+* Open Preformatted Template live file F.PPT.OE.TEMPLATE
+    F.PPT.OE.TEMPLATE = ''
+    FN.PPT.OE.TEMPLATE = 'F.PPT.OE.TEMPLATE'
+    CALL OPF(FN.PPT.OE.TEMPLATE,F.PPT.OE.TEMPLATE)
+
+* Open Preformatted Template UnAuthorised file F.PPT.OE.TEMPLATE$NAU
+    F.PPT.OE.TEMPLATE$NAU = ''
+    FN.PPT.OE.TEMPLATE$NAU = 'F.PPT.OE.TEMPLATE$NAU'
+    CALL OPF(FN.PPT.OE.TEMPLATE$NAU,F.PPT.OE.TEMPLATE$NAU)
+
+    RETURN
+*================================================================================
+PROCESS.TEMPLATE:
+
+    ID.PPT.OE.TEMPLATE = ''
+*    IF NOT(OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = "TELNET") THEN
+    ID.PPT.OE.TEMPLATE = COMI
+*    END ELSE
+*        ID.PPT.OE.TEMPLATE = R.NEW(PO.LOCAL.REF)<1,V_LR.PO.INSTRUCTION.REF>
+*    END
+
+    V_ER = ''
+    CALL F.MATREAD(FN.PPT.OE.TEMPLATE, ID.PPT.OE.TEMPLATE, MAT R.PPT.OE.TEMPLATE, C$SYSDIM, F.PPT.OE.TEMPLATE, V_ER)
+
+* if PPT.OE.TEMPLATE record does not exist, read from the unauthorised file to see whether it is there.
+
+    IF V_ER NE '' THEN
+        V_ER = ''
+        CALL F.MATREAD(FN.PPT.OE.TEMPLATE$NAU, ID.PPT.OE.TEMPLATE, MAT R.PPT.OE.TEMPLATE, C$SYSDIM, F.PPT.OE.TEMPLATE$NAU, V_ER)
+    END
+
+* if PPT.OE.TEMPLATE record exists default information across to the current PAYMENT.ORDER. V_ER will be
+* set if record does not exist.
+
+    IF V_ER = '' THEN
+* Validate that the data PPTMPred in the preformatted payment matches the version it is being brought into.
+        GOSUB CHECK.POPULATION
+
+        IF ETEXT = "" THEN
+            GOSUB POPULATE.PO.RECORD    ;* Populate Funds Transfer record with details on Preformatted Template  record
+        END ELSE
+            CALL ERR
+            V$ERROR = 1
+        END
+
+        CALL REFRESH.FIELD (AF,"")
+
+    END ELSE
+        ETEXT = 'Preformatted Template does not exist'
+    END
+    RETURN
+*================================================================================
+CHECK.POPULATION:
+    IF FIELD(PGM.VERSION,'.',2) = 'CR1' THEN
+        IF R.PPT.OE.TEMPLATE(PPTMP.OutputChannel) NE "LEDGER" THEN
+            ETEXT = 'Not an Internal Transfer Template'
+        END
+    END   ;*Test for Internal Version
+
+    RETURN
+*================================================================================
+POPULATE.PO.RECORD:
+* Populate Funds Transfer record with details on Preformatted Template  record
+
+* Preformatted Payment ID
+    IF R.NEW(PO.LOCAL.REF)<1,V_LR.PO.INSTRUCTION.REF> = "" THEN
+        R.NEW(PO.LOCAL.REF)<1,V_LR.PO.INSTRUCTION.REF> = COMI
+    END
+* Debit Account
+    IF R.NEW(PO.DEBIT.ACCOUNT) = "" THEN
+        R.NEW(PO.DEBIT.ACCOUNT) = R.PPT.OE.TEMPLATE(PPTMP.DebitAccountNumber)
+        ID.ACCOUNT = R.PPT.OE.TEMPLATE(PPTMP.DebitAccountNumber)
+        CALL DBR('ACCOUNT':FM:AC.CURRENCY,ID.ACCOUNT,V_CURRENCY)
+        IF R.NEW(PO.DEBIT.CCY) = "" THEN
+            R.NEW(PO.DEBIT.CCY) = V_CURRENCY
+        END
+    END
+
+* Debit Amount
+    IF R.NEW(PO.PAYMENT.AMOUNT) = "" THEN
+        R.NEW(PO.PAYMENT.AMOUNT) = R.PPT.OE.TEMPLATE(PPTMP.TransactionAmount)
+    END
+* Transaction Currency
+    IF R.NEW(PO.PAYMENT.CURRENCY) = "" THEN
+        R.NEW(PO.PAYMENT.CURRENCY) = R.PPT.OE.TEMPLATE(PPTMP.TransactionCurrency)
+    END
+    IF FIELD(PGM.VERSION,'.',2) EQ 'CR1' THEN
+        IF R.NEW(PO.CREDIT.ACCOUNT) = "" THEN
+            R.NEW(PO.CREDIT.ACCOUNT) = R.PPT.OE.TEMPLATE(PPTMP.CreditAccountNumber)
+        END
+        IF R.NEW(PO.LOCAL.REF)<1,V_LR.PO.DR.NARRATIVE> = "" THEN
+            R.NEW(PO.LOCAL.REF)<1,V_LR.PO.DR.NARRATIVE> = R.PPT.OE.TEMPLATE(PPTMP.LOCAL.REF)<1,V_LR.POT.DR.NARRATIVE>
+        END
+        IF R.NEW(PO.LOCAL.REF)<1,V_LR.PO.CR.NARRATIVE> = "" THEN
+            R.NEW(PO.LOCAL.REF)<1,V_LR.PO.CR.NARRATIVE> = R.PPT.OE.TEMPLATE(PPTMP.LOCAL.REF)<1,V_LR.POT.CR.NARRATIVE>
+        END
+    END ELSE
+* Ordering Institution 52A/52D
+        IF R.NEW(PO.LOCAL.REF)<1,V_LR.PO.ORD.ACC.BOE> = "" THEN
+            R.NEW(PO.LOCAL.REF)<1,V_LR.PO.ORD.ACC.BOE> = R.PPT.OE.TEMPLATE(PPTMP.OrderingInstAccount)
+        END
+        IF R.NEW(PO.LOCAL.REF)<1,V_LR.PO.BOE.ORD.BANK> = "" THEN
+            R.NEW(PO.LOCAL.REF)<1,V_LR.PO.BOE.ORD.BANK> = R.PPT.OE.TEMPLATE(PPTMP.OrderingInstAddress)
+        END
+* Intermediary Acct No 56
+        V.INTERMED.ACC = R.PPT.OE.TEMPLATE(PPTMP.IntermediaryInstAccount)
+        BEGIN CASE
+        CASE V.INTERMED.ACC[1,2] = "SC"
+            IF R.NEW(PO.INTERMED.BANK.CLEARING.CODE) = "" THEN R.NEW(PO.INTERMED.BANK.CLEARING.CODE) = V.INTERMED.ACC
+        CASE V.INTERMED.ACC[1,4] = "//SC"
+            IF R.NEW(PO.INTERMED.BANK.CLEARING.CODE) = "" THEN R.NEW(PO.INTERMED.BANK.CLEARING.CODE) = V.INTERMED.ACC[3,LEN(V.INTERMED.ACC)-2]
+        CASE 1
+            IF R.NEW(PO.INTERMED.BANK.ACC) = "" THEN R.NEW(PO.INTERMED.BANK.ACC) = V.INTERMED.ACC
+        END CASE
+        IF R.NEW(PO.INTERMED.POSTAL.ADDR.LINE) = "" THEN R.NEW(PO.INTERMED.POSTAL.ADDR.LINE) = R.PPT.OE.TEMPLATE(PPTMP.IntermediaryInstAddress)
+        IF R.NEW(PO.INTERMED.BIC) = "" THEN R.NEW(PO.INTERMED.BIC) = R.PPT.OE.TEMPLATE(PPTMP.IntermediaryInstIdentifierCode)
+* Acct With Institution 57
+        V.ACWINS.ACC = R.PPT.OE.TEMPLATE(PPTMP.AccountWithInstAccount)
+        BEGIN CASE
+        CASE V.ACWINS.ACC[1,2] = "SC"
+            IF R.NEW(PO.ACCT.WITH.BANK.CLEARING.CODE) = "" THEN R.NEW(PO.ACCT.WITH.BANK.CLEARING.CODE) = V.ACWINS.ACC
+        CASE V.ACWINS.ACC[1,4] = "//SC"
+            IF R.NEW(PO.ACCT.WITH.BANK.CLEARING.CODE) = "" THEN R.NEW(PO.ACCT.WITH.BANK.CLEARING.CODE) = V.ACWINS.ACC[3,LEN(V.ACWINS.ACC)-2]
+        CASE 1
+            IF R.NEW(PO.ACCT.WITH.BANK.ACC) = "" THEN R.NEW(PO.ACCT.WITH.BANK.ACC) = R.PPT.OE.TEMPLATE(PPTMP.AccountWithInstAccount)
+        END CASE
+        IF R.NEW(PO.ACCT.WITH.BANK.POST.ADDR.LN) = "" THEN R.NEW(PO.ACCT.WITH.BANK.POST.ADDR.LN) = R.PPT.OE.TEMPLATE(PPTMP.AccountWithInstAddress)
+        IF R.NEW(PO.ACCT.WITH.BANK.BIC) = "" THEN R.NEW(PO.ACCT.WITH.BANK.BIC) = R.PPT.OE.TEMPLATE(PPTMP.AccountWithInstIdentifierCode)
+* Beneficiary Institution 58A/58D
+        IF R.NEW(PO.BENEFICIARY.BIC) = "" THEN R.NEW(PO.BENEFICIARY.BIC) = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryIdentifierCode)
+* Beneficiary 59/59A
+        IF R.NEW(PO.BENEFICIARY.ACCOUNT.NO) = "" THEN R.NEW(PO.BENEFICIARY.ACCOUNT.NO) = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAccount)
+        IF R.NEW(PO.BENEFICIARY.NAME) = "" THEN R.NEW(PO.BENEFICIARY.NAME) = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryName)
+        IF R.NEW(PO.BEN.POST.ADDR.LINE)<1,1> = "" AND R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress1) NE "" THEN
+            R.NEW(PO.BEN.POST.ADDR.LINE)<1,1> = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress1)
+        END
+        IF R.NEW(PO.BEN.POST.ADDR.LINE)<1,2> = "" AND R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress2) NE "" THEN
+            R.NEW(PO.BEN.POST.ADDR.LINE)<1,2> = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress2)
+        END
+        IF R.NEW(PO.BEN.POST.ADDR.LINE)<1,3> = "" AND R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress3) NE "" THEN
+            R.NEW(PO.BEN.POST.ADDR.LINE)<1,3> = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryAddress3)
+        END
+        IF R.NEW(PO.BENEFICIARY.COUNTRY.CODE) = "" THEN R.NEW(PO.BENEFICIARY.COUNTRY.CODE) = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryCountry)
+        IF R.NEW(PO.BENEFICIARY.BIC) = "" THEN R.NEW(PO.BENEFICIARY.BIC) = R.PPT.OE.TEMPLATE(PPTMP.BeneficiaryIdentifierCode)
+* Remittance Information 70
+        IF R.NEW(PO.REMITTANCE.INFORMATION) = "" THEN R.NEW(PO.REMITTANCE.INFORMATION) = R.PPT.OE.TEMPLATE(PPTMP.PaymentDetails)
+* Details of Charges 71
+        IF R.NEW(PO.CHARGE.BEARER) = "" THEN R.NEW(PO.CHARGE.BEARER) = R.PPT.OE.TEMPLATE(PPTMP.ChargeOption)
+* Sender To Receiver Info 72
+        IF R.NEW(PO.BANK.TO.BANK.INFO) = "" THEN R.NEW(PO.BANK.TO.BANK.INFO) = R.PPT.OE.TEMPLATE(PPTMP.InstructionCode)
+
+    END
+
+    RETURN
+*================================================================================
+END

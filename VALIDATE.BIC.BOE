@@ -1,0 +1,252 @@
+*-----------------------------------------------------------------------------
+* <Rating>238</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE VALIDATE.BIC.BOE
+*=========================================================================================
+* NAME: P103 - Make CHAPS payment
+*
+* PROGRAMMER: Richard Kalas (Temenos)
+*
+* DATE: 28/11/2002
+*
+* DESCRIPTION:
+*
+*    Validation routine of BIC codes. Extracted from V.FT.CHAPS.CHECK.FIELDS.BOE for
+*    use in V.FX.CHAPS.CHECK.FIELDS.BOE and V.MM.CHAPS.CHECK.FIELDS.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+*
+*       V.XX.CHAPS.CHECK.FIELDS.BOE
+*
+* CALLS:
+*
+*
+* CHANGE HISTORY:
+*      GLOB-202 05/03/2004 Richard Kalas (Temenos)
+*      COMI is being cleared and causing elements of a multivalue to be
+*      removed.
+*
+* GLOB627     Phil Gall                       08/03/06
+* When a non-live system is being used take the bic codes from
+* DE.ADDRESS records rather than from I_COMMON.BOE. This makes the system
+* configureable for CHAPS, TARGET and non-CHAPS BICs
+*
+* T24 UPG-17741 - Kavitha Srinivasan - 19 OCT 2012
+* Changes done to show the enrichments in Browser
+*=========================================================================================
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_COMMON.BOE      ;* Bank of England Common Block
+*    $INSERT I_F.FUNDS.TRANSFER
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+    $INSERT I_F.AGENCY
+    $INSERT I_F.MNEMONIC.CUSTOMER
+*    $INSERT I_F.FT.TAPE.PARAMS
+*    $INSERT I_F.FT.LOCAL.CLEARING
+*    $INSERT I_F.FT.BC.PARAMETER
+*    $INSERT I_FT.LOCAL.COMMON
+*    $INSERT I_F.VERSION
+    $INSERT I_F.DE.BIC.PARAMETER
+    $INSERT I_F.DE.BIC
+    $INSERT I_F.DE.ADDRESS
+*    $INSERT I_F.NCB.BIC.BOE
+*    $INSERT I_F.BC.SORT.CODE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.OFS.SOURCE
+*=========================================================================================
+
+    IF COMI NE "" THEN
+
+        GOSUB INITIALISE
+
+        GOSUB VALIDATE.SWIFT
+
+        GOSUB PROCESS.ERROR
+
+    END
+
+    RETURN
+
+*================================================================================
+INITIALISE:
+
+    V_AC.CCY = ''   ;* Currency variable
+    V_PREFIX = 'SW-'
+    EQU TRUE TO 1, FALSE TO 0
+
+    IF GETENV('glbenv',V_GLBENV) THEN
+        IF V_GLBENV = 'lglb' THEN
+            V_LIVE = TRUE
+        END ELSE
+            V_LIVE = FALSE
+        END
+    END ELSE
+        V_LIVE = FALSE
+    END
+
+* Set live and trialing RT BIC Code
+
+    IF V_LIVE = TRUE THEN
+        V_PAYMENT.BIC = C$BOE.PAYMENT.BIC
+    END ELSE
+        ID.DE.ADDRESS.3 = ID.COMPANY:".SWIFT.3"
+        ID.DE.BIC.3 = ''
+        CALL DBR("DE.ADDRESS":FM:DE.ADD.DELIVERY.ADDRESS,ID.DE.ADDRESS.3,ID.DE.BIC.3)
+        V_RT.BIC = ID.DE.BIC.3[1,8]
+
+        ID.DE.ADDRESS.2 = ID.COMPANY:".SWIFT.2"
+        ID.DE.BIC.2 = ''
+        CALL DBR("DE.ADDRESS":FM:DE.ADD.DELIVERY.ADDRESS,ID.DE.ADDRESS.2,ID.DE.BIC.2)
+        V_PAYMENT.BIC = ID.DE.BIC.2[1,8]
+    END
+
+    V_COMI.SAVE = COMI
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+
+VALIDATE.SWIFT:
+
+    IF COMI[1,3] EQ V_PREFIX THEN
+
+* If the currency entered is EURO the bank and customer fields must contain a valid
+* BIC code. This is validated by reading from DE.BIC file, if the DE.BIC.PARAMETER
+* flag, VALIDATE.BIC is set to 'Y'. If not, the BIC is validated to ensure it meets the
+* expected BIC format. This is important so the routines can be tested without DE.BIC
+* having been loaded. In LIVE system it is expected this flag will always be 'Y'.
+
+        ID.DE.BIC = COMI[4,LEN(COMI)-3]
+        GOSUB VALIDATE.BIC
+
+    END ELSE
+
+* If input is not prefixed by SW-, assume it is a MNEMONIC or CUSTOMER number
+
+* Read the CUSTOMER file for MNEMONIC, if customer number entered, and test MNEMONIC
+* against DE.BIC file to see if valid.
+
+        IF NUM(COMI) THEN
+            ID.DE.BIC = ''
+            ID.CUSTOMER = COMI
+            CALL DBR("CUSTOMER":FM:EB.CUS.MNEMONIC,ID.CUSTOMER,ID.DE.BIC)
+        END ELSE
+            ID.DE.BIC = COMI
+            ID.CUSTOMER = ''
+            CALL DBR("MNEMONIC.CUSTOMER":FM:EB.MCU.CUSTOMER,ID.DE.BIC,ID.CUSTOMER)
+        END
+
+        GOSUB VALIDATE.BIC
+
+        IF ETEXT NE '' THEN
+
+* Read the DE.ADDRESS file to see if a valid BIC is set up
+
+            ID.DE.ADDRESS = ID.COMPANY:".C-":ID.CUSTOMER:".SWIFT.1"
+            ID.DE.BIC = ''
+            CALL DBR("DE.ADDRESS":FM:DE.ADD.DELIVERY.ADDRESS,ID.DE.ADDRESS,ID.DE.BIC)
+
+            GOSUB VALIDATE.BIC
+
+        END
+
+        IF ETEXT NE '' THEN
+
+* Read from the AGENCY file to see if a valid BIC is set there
+
+            ID.DE.BIC = ''
+            CALL DBR("AGENCY":FM:EB.AG.SWIFT.CONF.ADDR,ID.CUSTOMER,ID.DE.BIC)
+
+            GOSUB VALIDATE.BIC
+
+        END         ;* IF ETEXT NE ''
+
+    END   ;* IF COMI[1,3] = V_PREFIX
+
+    RETURN
+
+*================================================================================
+
+VALIDATE.BIC:
+
+
+    IF ID.DE.BIC NE '' THEN
+
+* Check the DE.BIC.PARAMETER record to see if BIC codes are to be validated against
+* the DE.BIC file.
+
+        V_VALIDATE.BIC = ""
+        CALL DBR("DE.BIC.PARAMETER":FM:DE.BIC.PAR.VALIDATE.BIC,"SYSTEM",V_VALIDATE.BIC)
+        IF V_VALIDATE.BIC = "Y" THEN
+
+* Validate that the input is of a valid SWIFT format, appending XXX if only 8 characters.
+
+            COMI = ID.DE.BIC
+            IF LEN(ID.DE.BIC) = 8 THEN ID.DE.BIC := 'XXX'
+
+            CALL DE.VALIDATE.SWIFT.ADDRESS("1","1")
+
+            IF ETEXT = '' THEN
+
+                V_ENRI = ""
+                CALL DBR("DE.BIC":FM:DE.BIC.INSTITUTION, ID.DE.BIC, V_ENRI)
+
+                IF ETEXT = "" THEN
+                    COMI.ENRI = CHANGE(V_ENRI, @VM, " ")
+* T24 UPG-17741 Start
+                    IF OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION' THEN
+                        OFS$ENRI<AF,AV,AS> = COMI.ENRI
+                    END
+* T24 UPG-17741 End
+                    COMI = V_PREFIX:ID.DE.BIC
+                END ELSE
+                    ETEXT = 'BIC does not exist on DE.BIC file'
+                    COMI = V_COMI.SAVE
+                END
+
+            END ELSE
+                ETEXT = 'Invalid BIC format'
+                COMI = V_COMI.SAVE
+            END
+
+        END ELSE
+
+            COMI = ID.DE.BIC
+
+            CALL DE.VALIDATE.SWIFT.ADDRESS("1","1")
+
+            IF ETEXT = '' THEN
+                COMI = V_PREFIX:COMI
+                COMI.ENRI = 'BIC FORMAT VALIDATED'
+* T24 UPG-17741 Start
+                IF OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION' THEN
+                    OFS$ENRI<AF,AV,AS> = COMI.ENRI
+                END
+* T24 UPG-17741 End
+            END ELSE
+                ETEXT = 'Invalid BIC Format'
+                COMI = V_COMI.SAVE
+            END
+
+        END
+    END ELSE
+        ETEXT = 'No BIC code set in Customer, Agency or DE.ADDRESS'
+        COMI = V_COMI.SAVE
+    END
+
+    RETURN
+*================================================================================
+
+PROCESS.ERROR:
+
+    RETURN
+*================================================================================
+
+* <new subroutines>
+END

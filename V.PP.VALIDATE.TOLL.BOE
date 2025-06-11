@@ -1,0 +1,211 @@
+**-----------------------------------------------------------------------------
+*-----------------------------------------------------------------------------
+* <Rating>4</Rating>
+*-----------------------------------------------------------------------------
+*
+    SUBROUTINE V.PP.VALIDATE.TOLL.BOE
+*=========================================================================================
+* NAME: V.PP.VALIDATE.TOLL.BOE
+*
+*********** 14/04/2020 - KS - PLEASE BE AWARE THAT THIS IS BASED ON THE EXISTING ROUTINE
+*********** V.FT.VALIDATE.TOLL.BOE CHANGES HAVE BEEN MADE FOR TOLL Upgrade 2020 *********
+*
+* DESCRIPTION:
+*      Validation routines on various GLOBUS fields when entering an Transaction in PAYMENT.ORDER
+*      The version will use Globus Commmon Var "AF" to determine which field we are on
+*
+* TECHNICAL DESCRIPTION
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+* VERSION PAYMENT.ORDER,DR1.CR1.BOE.GBP.TOLL
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+* Updated some changes to get COMI values -- manikandan(Temenos)
+* 09/03/2021 - Call V.TOLL.ORDERING.ADDRESS.BOE - Subhiksha C - To populate ordering address details from customer table
+*
+* 09/01/2024 - KS - R21 Upgrade - SC related changes
+* ======================================================================================
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PAYMENT.ORDER
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.CUSTOMER
+    $INSERT I_GTS.COMMON      ;* This is for OFS
+    $INSERT I_F.OFS.SOURCE
+    $INSERT I_F.VERSION
+    $USING EB.SystemTables
+    $USING PI.Contract
+*=========================================================================================
+
+    GOSUB INITIALISE
+    BEGIN CASE
+    CASE AF = PO.DEBIT.CCY
+        GOSUB DEBIT.CURRENCY
+    CASE AF = PO.DEBIT.VALUE.DATE
+        GOSUB DEBIT.VALUE.DATE
+    CASE AF = PO.DEBIT.ACCOUNT
+        GOSUB DEBIT.ACCT.NO
+    CASE AF = PO.CREDIT.ACCOUNT
+        GOSUB CREDIT.ACCT.NO
+    CASE AF = PO.INTERMED.BANK.ACC
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.INTERMED.BANK.IBAN
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.INTERMED.BANK.CLEARING.CODE
+        GOSUB CHECK.SORT.CODE.FORMAT
+    CASE AF = PO.ACCT.WITH.BANK.ACC
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.ACCT.WITH.BANK.IBAN
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.ACCT.WITH.BANK.CLEARING.CODE
+        GOSUB CHECK.SORT.CODE.FORMAT
+    CASE AF = PO.BENEFICIARY.ACCOUNT.NO
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.BENEFICIARY.IBAN
+        GOSUB CHECK.AC.OR.IBAN.FORMAT
+    CASE AF = PO.BEN.BANK.CLEARING.CODE
+        GOSUB CHECK.SORT.CODE.FORMAT
+    CASE 1
+        RETURN
+    END CASE
+    RETURN
+*=========================================================================================
+INITIALISE:
+* Open Account File
+    FV.ACCOUNT = ""  ; FN.ACCOUNT = "F.ACCOUNT"
+    CALL OPF(FN.ACCOUNT, FV.ACCOUNT)
+    V_COMI = ""; V_LEN = 0
+    RETURN
+*=========================================================================================
+DEBIT.CURRENCY:
+* Validation to ensure that the Currency entered is GBP.
+**COMI Changes
+    V_COMI = EB.SystemTables.getComi()
+    V_VALID.CCY = "GBP"
+
+    V_DR.CCY = V_COMI
+    LOCATE V_DR.CCY IN V_VALID.CCY<1> SETTING V_CCY.LOC THEN
+* Update the Debit CCY
+        R.NEW(PO.DEBIT.CCY) = V_DR.CCY
+*        CALL REFRESH.FIELD(PO.DEBIT.CCY,"")       ;* RK 23/05/2003
+    END ELSE
+        RETURN      ;* Return to CASE because we have an ERROR!!
+    END
+    RETURN
+*=========================================================================================
+DEBIT.VALUE.DATE:
+*COMI Changes
+    V_COMI = EB.SystemTables.getComi()
+
+    IF V_COMI EQ "" THEN
+        V_COMI = TODAY
+    END
+    IF V_COMI LT TODAY THEN   ;* Only allow Today or Forward Dated VALUE.
+        RETURN
+    END ELSE        ;* If VALUE is eq TODAY or FORWARD DATE then
+        EB.SystemTables.setRNew(PI.Contract.PaymentOrder.PoDebitValueDate,V_COMI)
+        IF MESSAGE EQ "VAL" THEN
+            V_COMI = R.NEW(PO.DEBIT.VALUE.DATE)
+            CALL IN2INT('16.1','INT')
+            IF ETEXT NE "" THEN
+                EB.SystemTables.setRNew(PI.Contract.PaymentOrder.PoPaymentExecutionDate,V_COMI)
+            END
+            ETEXT = ""
+        END
+    END
+
+    RETURN
+*=========================================================================================
+DEBIT.ACCT.NO:
+    V_COMI = EB.SystemTables.getComi()
+    IF GTSACTIVE AND NOT(OFS$SOURCE.REC<OFS.SRC.SOURCE.TYPE> = 'SESSION') THEN
+        CALL IN2ACC('16.1','ACC')
+        V_DR.ACCT.NO = V_COMI ;* This is the Globus Common Input Var
+        R.NEW(PO.DEBIT.ACCOUNT) = V_COMI
+    END ELSE
+        CALL IN2ACC('16.1','ACC')
+        V_DR.ACCT.NO = V_COMI ;* This is the Globus Common Input Var
+    END
+* Read Acct Record
+    R.ACCOUNT = "" ; V_AC.READ.ERR = ""
+    CALL F.READ(FN.ACCOUNT, V_DR.ACCT.NO, R.ACCOUNT, FV.ACCOUNT, V_AC.READ.ERR)
+    V_AC.CCY = R.ACCOUNT<AC.CURRENCY>   ;* CCY of A/C
+    IF V_AC.READ.ERR THEN
+        RETURN
+    END ELSE
+        IF V_AC.CCY EQ "GBP" THEN
+            R.NEW(PO.DEBIT.CCY) = V_AC.CCY
+        END ELSE
+            RETURN
+        END
+    END
+    CALL V.TOLL.ORDERING.ADDRESS.BOE    ;* Changes done by Subhiksha to populate Ordering address from customer table
+
+    RETURN          ;* Back to begining Case Statement.
+*=========================================================================================
+CREDIT.ACCT.NO:
+    V_COMI = EB.SystemTables.getComi()
+    CALL IN2ACC('16.1','ACC')
+    V_CR.ACCT.NO = V_COMI     ;* This is the Globus Common Input Var
+* Read Acct Record
+    R.ACCOUNT = "" ; V_AC.READ.ERR = ""
+    CALL F.READ(FN.ACCOUNT, V_CR.ACCT.NO, R.ACCOUNT, FV.ACCOUNT, V_AC.READ.ERR)
+    V_AC.CCY = R.ACCOUNT<AC.CURRENCY>   ;* CCY of A/C
+    IF V_AC.READ.ERR THEN
+        RETURN
+    END ELSE
+        IF V_AC.CCY EQ "GBP" THEN
+            RETURN
+        END ELSE
+            RETURN
+        END
+    END
+    RETURN
+*=========================================================================================
+CHECK.SORT.CODE.FORMAT:
+    V_COMI = EB.SystemTables.getComi()
+    Y.FIELD = ""; Y.LEN.ADDR = 0
+    IF AF = PO.INTERMED.BANK.CLEARING.CODE THEN
+        IF V_COMI NE "" THEN
+            Y.FIELD = PO.INTERMED.BANK.IDENTIFIER
+        END
+    END ELSE
+        IF AF = PO.ACCT.WITH.BANK.CLEARING.CODE AND V_COMI NE "" THEN
+
+            Y.FIELD = PO.ACCT.WITH.BANK.IDENTIFIER
+        END
+    END
+
+    BEGIN CASE
+    CASE V_COMI = ""
+        RETURN
+    CASE (V_COMI[1,4] = "//SC" AND LEN(V_COMI) = 10)
+        EB.SystemTables.setComi(V_COMI[5,6])
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE (V_COMI[1,2] = "SC" AND LEN(V_COMI) = 8)
+        EB.SystemTables.setComi(V_COMI[3,6])
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE (V_COMI[1,2] <> "SC" AND LEN(V_COMI) = 6)
+        R.NEW(Y.FIELD)="GBDSC"
+    CASE 1
+
+        RETURN
+    END CASE
+    V_COMI = ""
+    RETURN
+*=========================================================================================
+CHECK.AC.OR.IBAN.FORMAT:
+    V_COMI = EB.SystemTables.getComi()
+    IF V_COMI = "" THEN RETURN
+    V_LEN = LEN(V_COMI)-1
+    IF V_COMI[1,1] = "/" THEN
+        EB.SystemTables.setComi(V_COMI[2,V_LEN])
+    END
+    V_COMI = ""; V_LEN = 0
+    RETURN
+END

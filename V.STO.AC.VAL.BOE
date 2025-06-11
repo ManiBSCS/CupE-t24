@@ -1,0 +1,144 @@
+*-----------------------------------------------------------------------------
+* <Rating>-37</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STO.AC.VAL.BOE
+**************************************************************
+* NAME: V.STO.AC.VAL.BOE
+* PROGRAMMER: ROB WEBB (BOE)  DATE: 17 JUL 2002
+*
+* DESCRIPTION: TO CHECK THAT THE CREDIT ACCOUNT CURRENCY MATCHES THE CURRENCY OF
+* THE INTERNAL PREFORMATTED PAYMENT VERSION.
+*
+* TECHNICAL DESCRIPTION:
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY VERSION:
+* STANDING.ORDER,AC.EUR.A.BOE.OL
+* STANDING.ORDER,AC.GBP.A.BOE.OL
+* STANDING.ORDER,AC.EUR.BOE.OL
+* STANDING.ORDER,AC.EUR.BOE
+* STANDING.ORDER,AC.GBP.BOE
+* STANDING.ORDER,AC.GBP.BOE.OL
+*
+* CALLS:
+* OPF, F.READ, STORE.END.ERROR, DBR, REBUILD.SCREEN
+*
+* CHANGE HISTORY:
+* GLOB625 Phil Gall (14/02/2006)
+* Splitting of the CHAPS settlement account
+*
+* T24-689 Kirk London (19/03/12) R11 Upgrade
+* Removing multiple DBR's & general tidy up of code
+**************************************************************
+
+**** INSERTS ****
+    $INSERT I_COMMON
+    $INSERT I_COMMON.BOE      ;* Bank of England Common Block
+    $INSERT I_EQUATE
+    $INSERT I_F.ACCOUNT
+    $INSERT I_F.STANDING.ORDER
+
+**** MAIN ****
+
+    GOSUB INITIALISE
+
+    IF AF = STO.LOCAL.REF AND AV = 12 THEN
+        IF COMI NE "" THEN
+            V_CR.ACCOUNT = COMI
+        END
+* Set CPTY.ACCT.NO to value of COMI (local Ref field for credit account number)
+
+        R.NEW(STO.CPTY.ACCT.NO) = V_CR.ACCOUNT
+
+    END
+
+    GOSUB GET.ACCOUNT.CURRENCY
+
+    IF ETEXT = "" THEN
+        IF V_STO.CCY = "GBP" THEN
+            R.NEW(STO.CPTY.ACCT.NO) = C$BOE.BNKGBPGOLL
+        END
+        IF V_STO.CCY = "EUR" THEN
+            R.NEW(STO.CPTY.ACCT.NO) = C$BOE.BNKEURCUS
+        END
+
+    END
+
+    GOSUB GET.CCY.MKT
+
+*==========================================================================
+INITIALISE:
+
+* Open Account File
+
+    FN.ACCOUNT = "F.ACCOUNT"
+    F.ACCOUNT = ""
+    CALL OPF(FN.ACCOUNT,F.ACCOUNT)
+
+    RETURN
+
+*==========================================================================
+GET.ACCOUNT.CURRENCY:
+
+
+* Read Account Record
+
+    R.ACCOUNT = "" ; V_AC.READ.ERR = ""
+    CALL F.READ(FN.ACCOUNT,V_CR.ACCOUNT,R.ACCOUNT,F.ACCOUNT,V_AC.READ.ERR)
+
+* Initalise any variables off of the ACCOUNT record
+
+    V_AC.CCY = R.ACCOUNT<AC.CURRENCY>   ;*Currency of Account
+
+* Get Currency of Standing order account
+    V_STO.ACCOUNT = FIELD(ID.NEW,'.',1)
+
+* KL20120319.s
+
+    R.ACCOUNT.1 = "" V.AC.ERR = ""
+    CALL F.READ(FN.ACCOUNT,V_STO.ACCOUNT,R.ACCOUNT.1,F.ACCOUNT,V.AC.ERR)
+    V_STO.CCY = R.ACCOUNT.1<AC.CURRENCY>
+
+* KL20120319.e
+
+    IF V_STO.CCY NE V_AC.CCY THEN
+        ETEXT = 'CURRENCY MISMATCH'
+        CALL STORE.END.ERROR
+    END
+
+    RETURN
+
+*==========================================================================
+GET.CCY.MKT:
+
+* Default Currency market
+
+    IF V_STO.ACCOUNT NE "" THEN
+        V_CCY.MKT = ""
+
+* KL20120319.s
+
+        IF NUM(V_STO.ACCOUNT) OR V_STO.ACCOUNT MATCHES "PL5N" THEN
+            V_CCY.MKT = R.ACCOUNT.1<AC.CURRENCY.MARKET>
+        END ELSE
+            V_ACCT.ID = ""
+            CALL DBR("MNEMONIC.ACCOUNT":FM:1,V_STO.ACCOUNT,V_ACCT.ID)
+
+            R.ACCOUNT.2 = "" V.AC.ERR = ""
+            CALL F.READ(FN.ACCOUNT,V_ACCT.ID,R.ACCOUNT.2,F.ACCOUNT,V.AC.ERR)
+            V_CCY.MKT = R.ACCOUNT.2<AC.CURRENCY.MARKET>
+        END
+
+* KL20120319.e
+
+        IF ETEXT = "" THEN
+            R.NEW(STO.CURRENCY.MARKET) = V_CCY.MKT
+            CALL REBUILD.SCREEN
+        END
+    END
+    RETURN
+
+*==========================================================================
+
+END

@@ -1,0 +1,67 @@
+
+ *-----------------------------------------------------------------------------
+ * <Rating>-40</Rating>
+ *-----------------------------------------------------------------------------
+     SUBROUTINE V.UPDATE.POT.CONCAT.BOE
+ *-----------------------------------------------------------------------------
+ * NAME: V.UPDATE.POT.CONCAT.BOE
+ *
+ * PROGRAMMER: Kavitha Srinivasan
+ * DATE: 25/08/2023
+ * DESCRIPTION:
+ *         This routine is designed to update the PPT.OE.TEMPLATE table.
+ *
+ * CHANGE REQUEST / DEVELOPMENT REF:
+ *        PRE-FORMATTED TEMPLATES
+ *
+ * CALLED BY:
+ *
+ * CALLS:
+ *
+ * CHANGE HISTORY:
+ *-----------------------------------------------------------------------------
+     $INSERT I_COMMON
+     $INSERT I_EQUATE
+     $INSERT I_F.PPT.OE.TEMPLATE
+     $INSERT I_F.PPT.OE.TEMPLATE.CONCAT
+
+     GOSUB INIT
+     GOSUB PROCESS
+
+     RETURN
+ *-----------------------------------------------------------------------------
+ INIT:
+ *-----------------------------------------------------------------------------
+
+     FN.PPT.OE.TEMPLATE.CONCAT = 'F.PPT.OE.TEMPLATE.CONCAT'
+     F.PPT.OE.TEMPLATE.CONCAT = ''
+     CALL OPF(FN.PPT.OE.TEMPLATE.CONCAT,F.PPT.OE.TEMPLATE.CONCAT)
+
+     FN.PPT.OE.TEMPLATE = 'F.PPT.OE.TEMPLATE'
+     F.PPT.OE.TEMPLATE = ''
+     CALL OPF(FN.PPT.OE.TEMPLATE,F.PPT.OE.TEMPLATE)
+
+     V.POT.ID = ID.NEW
+     V.TEMPLATE.ID = R.NEW(PPTMP.TemplateID)
+
+     RETURN
+ *-----------------------------------------------------------------------------
+ PROCESS:
+ *-----------------------------------------------------------------------------
+
+     IF V.TEMPLATE.ID THEN
+         R.Concatrecord = '' ; Err.read = '' ; Position1 = ''
+         CALL F.READ(FN.PPT.OE.TEMPLATE.CONCAT,V.TEMPLATE.ID,R.Concatrecord,F.PPT.OE.TEMPLATE.CONCAT,Err.read)
+         IF R.Concatrecord THEN
+             LOCATE ID.NEW IN R.Concatrecord<1,1> SETTING Position1 ELSE
+                 R.Concatrecord<1,-1> = ID.NEW
+             END
+         END ELSE
+             R.Concatrecord<1,1> = ID.NEW
+         END
+     END
+     CALL F.WRITE(FN.PPT.OE.TEMPLATE.CONCAT,V.TEMPLATE.ID,R.Concatrecord)
+
+     RETURN
+ *-----------------------------------------------------------------------------
+ END

@@ -1,0 +1,59 @@
+*-----------------------------------------------------------------------------
+* <Rating>-2</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.VAL.BIC.BOE
+*====================================================================================
+* NAME: V.PP.OE.VAL.BIC.BOE
+* PROGRAMMER: Manikandan
+* DATE: 21/04/20
+* TECHNICAL DESCRIPTION:
+*
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*     MM - 26/05/2021 - 71907 -- Duplication of field 52 in the Order Entry Redirect Bank CHAPS Transfer screen upon validation
+*====================================================================================
+* INSERTS
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.EB.ERROR
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.PP.LORO.NOSTRO.ACCOUNT
+
+    IF ((R.NEW(PP.OEYG.OrderingIdentifierCode)= "OE") AND (R.NEW(PP.OEYG.IncomingMessageType) NE 'MXBT' 'MXCT')) THEN
+*    V_ORDERING.BIC = R.NEW(PP.OEYG.OrderingIdentifierCode)
+    V_ORDERING.BIC = R.NEW(PP.OEYG.OrderingInstIdentifierCode)
+    V_DEBIT.ACC.NUMBER = R.NEW(PP.OEYG.DebitAccountNumber)
+
+    FN.PP.LORO.NOSTRO.ACCOUNT = 'F.PP.LORO.NOSTRO.ACCOUNT'
+    F.PP.LORO.NOSTRO.ACCOUNT = ''
+    CALL OPF(FN.PP.LORO.NOSTRO.ACCOUNT,F.PP.LORO.NOSTRO.ACCOUNT)
+
+*    IF V_ORDERING.BIC EQ '' AND V_DEBIT.ACC.NUMBER NE '' THEN
+    IF V_ORDERING.BIC EQ '' AND V_DEBIT.ACC.NUMBER NE '' THEN         ;* 71907
+        SEL.LIST =''
+        SEL.CMD = 'SELECT ':FN.PP.LORO.NOSTRO.ACCOUNT:' WITH AccountNumber EQ ':V_DEBIT.ACC.NUMBER
+        CALL EB.READLIST(SEL.CMD,SEL.LIST,'',NO.OF.SEL,SEL.ERR)
+        V_LORO.ID =SEL.LIST<1>
+
+        CALL F.READ(FN.PP.LORO.NOSTRO.ACCOUNT,V_LORO.ID,R.PP.LORO.NOSTRO.ACCOUNT,F.PP.LORO.NOSTRO.ACCOUNT,ERR.PP.LORO.NOSTRO.ACCOUNT)
+        IF R.PP.LORO.NOSTRO.ACCOUNT THEN
+            LN.ACCOUNT.NUMBER = R.PP.LORO.NOSTRO.ACCOUNT<PP.LNA.AccountNumber>
+            CHANGE @VM TO @FM IN LN.ACCOUNT.NUMBER
+            LOCATE V_DEBIT.ACC.NUMBER IN LN.ACCOUNT.NUMBER SETTING LN.POS THEN
+                R.NEW(PP.OEYG.OrderingInstIdentifierCode) = R.PP.LORO.NOSTRO.ACCOUNT<PP.LNA.OwningBIC,LN.POS>
+            END ELSE
+                AF = PP.OEYG.OrderingInstIdentifierCode
+                AV = 1
+                ETEXT = 'Missing LORO & NOSTRO Account for the Debit Account -':V_DEBIT.ACC.NUMBER
+                CALL STORE.END.ERROR
+            END
+        END
+    END
+    RETURN
+END

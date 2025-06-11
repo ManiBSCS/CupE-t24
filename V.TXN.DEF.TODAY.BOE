@@ -1,0 +1,41 @@
+*-----------------------------------------------------------------------------
+* <Rating>0</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.TXN.DEF.TODAY.BOE
+*====================================================================================
+* NAME: V.TXN.DEF.TODAY.BOE
+* DATE: 09/04/2020
+* TECHNICAL DESCRIPTION:
+*           This Version Subroutine is designed to default the value of TODAY (a
+*           Globus Common Variable into the corresponding VALUE.DATE field of the
+*           application as soon as the user enters a new Transaction.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      TOLL - UPGRADE 2020
+*
+* CALLED BY:
+*    VERSION PAYMENT.ORDER,DR1.CR1.BOE.GBP.TOLL
+*
+* CALLS:
+*
+* CHANGE HISTORY:
+*====================================================================================
+* INSERTS
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PAYMENT.ORDER
+    $INSERT I_F.DATES
+
+    IF R.NEW(PO.CURR.NO) EQ "" THEN
+        IF AF EQ PO.DEBIT.VALUE.DATE AND COMI THEN
+            R.NEW(PO.CREDIT.VALUE.DATE) = COMI
+            R.NEW(PO.PAYMENT.EXECUTION.DATE) = COMI
+        END ELSE
+            R.NEW(PO.DEBIT.VALUE.DATE) = TODAY
+            R.NEW(PO.CREDIT.VALUE.DATE) = TODAY
+            R.NEW(PO.PAYMENT.EXECUTION.DATE) = TODAY
+        END
+    END
+
+    RETURN
+END

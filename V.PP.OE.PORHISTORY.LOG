@@ -1,0 +1,65 @@
+*-----------------------------------------------------------------------------
+* <Rating>-3</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.OE.PORHISTORY.LOG
+*
+*-----------------------------------------------------------------------------
+* NAME: V.PP.OE.PORHISTORY.LOG
+*
+* PROGRAMMER: Manikandan (TEMENOS)
+*
+* DATE: 07/01/2020
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This Validation routine is used by the version.control to record the call back details to AUDIT.TRAIL
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION.CONTROL - PP.ORDER.ENTRY
+*
+*
+*-----------------------------------------------------------------------------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_PaymentFrameworkService_PORHistoryLog
+    $USING PP.PaymentFrameworkService
+    IF OFS$BROWSER.HOLD EQ '' THEN
+        Y.GPO.DETAILS=''
+        FIELDPOS=''
+        CALL GET.LOC.REF("PP.ORDER.ENTRY","CALLBACKDETAILS",FIELDPOS) ;* TFS - 64618 *Added Call back details in the Audit trail
+        FPOS=''
+        CALL GET.LOC.REF("PP.ORDER.ENTRY","RSN.NUMBER",FPOS)
+
+        Y.GPO.DETAILS= R.NEW(PP.OEYG.LOCAL.REF)<1,FIELDPOS>
+        Y.RSN.DETAILS=R.NEW(PP.OEYG.LOCAL.REF)<1,FPOS>
+        Y.TRANS.ID=R.NEW(PP.OEYG.TransactionReferenceNumber)
+
+*Call back details entered will be captured in Audit trail
+        IF Y.GPO.DETAILS NE '' THEN
+            iPORHistoryLog<PORHistoryLog.companyID> = 'BNK'
+            iPORHistoryLog<PORHistoryLog.ftNumber>  =Y.TRANS.ID
+            iPORHistoryLog<PORHistoryLog.eventType> = 'INF'
+            iPORHistoryLog<PORHistoryLog.eventDescription> = 'Call Back Details Entered'
+            iPORHistoryLog<PORHistoryLog.errorCode>   = ''
+            iPORHistoryLog<PORHistoryLog.additionalInfo> = Y.GPO.DETAILS
+            CALL PaymentFrameworkService.insertPORHistoryLog(iPORHistoryLog,oPORHistoryLogError)
+        END
+*RSN Number & Signature Details entered will be captured in Audit trail
+        IF Y.RSN.DETAILS NE '' THEN
+            iPORHistoryLog<PORHistoryLog.companyID> = 'BNK'
+            iPORHistoryLog<PORHistoryLog.ftNumber>  =Y.TRANS.ID
+            iPORHistoryLog<PORHistoryLog.eventType> = 'INF'
+            iPORHistoryLog<PORHistoryLog.eventDescription> = 'RSN Number & Signature Details Entered'
+            iPORHistoryLog<PORHistoryLog.errorCode>   = ''
+            iPORHistoryLog<PORHistoryLog.additionalInfo> = Y.RSN.DETAILS
+            CALL PaymentFrameworkService.insertPORHistoryLog(iPORHistoryLog, oPORHistoryLogError)
+        END
+    END
+    RETURN
+END

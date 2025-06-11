@@ -1,0 +1,71 @@
+*-----------------------------------------------------------------------------
+* <Rating>-13</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.POSTING.RESTRICT.FXSS.BOE
+
+* PROGRAMMER: Gareth Chappell
+*
+* DATE: 16/03/2017
+*
+* DESCRIPTION:
+*
+*      Routine to prevent the user from removing or changing an existing POSTING.RESTRICT
+*              value
+*
+*
+*      The routine is attached to the following version(s):
+*      ACCOUNT,POSTING.RESTRICT.FXSS.BOE
+*      It is to be run off the POSTING.RESTRICT field
+*
+* CALLED BY:
+*      Version ACCOUNT,POSTING.RESTRICT.FXSS.BOE
+*
+* CALLS:
+*
+*      <<append new calls>>
+*
+* CHANGE HISTORY:
+*      <<change control entries>>
+*
+*
+*
+*
+*=========================================================================================
+* INSERTS
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.ACCOUNT
+*=========================================================================================
+*
+    GOSUB MAIN
+    RETURN
+
+MAIN:
+
+*Identify the existing value of the POSTING.RESTRICT field
+
+    v_oldPostingRestrict = R.OLD(AC.POSTING.RESTRICT)
+    v_newPostingRestrict = COMI
+
+*If the existing value is not NULL then fail validation - removal not allowed
+*If the existing value is not NULL and the new value <> existing value then fail validation - change not allowed
+
+    BEGIN CASE
+
+    CASE v_oldPostingRestrict NE "" AND v_newPostingRestrict = ""
+        ETEXT = 'Removal not allowed'
+        COMI = v_oldPostingRestrict
+        CALL STORE.END.ERROR
+    CASE v_oldPostingRestrict NE "" AND v_newPostingRestrict NE v_oldPostingRestrict
+        ETEXT = 'Change not allowed'
+        COMI = v_oldPostingRestrict
+        CALL STORE.END.ERROR
+    CASE 1
+
+    END CASE
+
+
+    RETURN
+END
+
+*=========================================================================================

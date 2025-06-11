@@ -1,0 +1,104 @@
+*-----------------------------------------------------------------------------
+* <Rating>-40</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.PP.AUTH.OVE.BOE
+*
+*-----------------------------------------------------------------------------
+* NAME: V.PP.AUTH.OVE.BOE
+*
+* PROGRAMMER: Manikandan (TEMENOS)
+*
+* DATE: 10/08/2021
+*
+* TECHNICAL DESCRIPTION:
+*
+*
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*
+*
+*-----------------------------------------------------------------------------
+    $USING EB.SystemTables
+    $USING PP.OrderEntryGUI
+    $USING EB.TransactionControl
+    $USING  EB.ErrorProcessing
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_F.EXCEPTION.LOG.FILE
+
+
+*    IF V$FUNCTION = "A" THEN
+
+    GOSUB INIT
+    IF V_OVERRIDE NE '' THEN
+        GOSUB OFS.MAPPING
+        GOSUB WRITE.TO.FILE
+    END
+    RETURN
+
+INIT:
+
+    V_OVERRIDE = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygOverride)
+    V_FT.ID = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygTransactionreferencenumber)
+    V_FTNUM = EB.SystemTables.getIdNew()
+    CNT.OVERRIDE = DCOUNT(V_OVERRIDE,@VM)
+
+    FN.EXCEPTION.LOG.FILE = 'F.EXCEPTION.LOG.FILE'
+    F.EXCEPTION.LOG.FILE = ''
+    CALL OPF(FN.EXCEPTION.LOG.FILE,F.EXCEPTION.LOG.FILE)
+
+    RETURN
+
+OFS.MAPPING:
+    R.EB.EXCEP.LOG<EB.EXC.SYS.USER> = 'U'
+    R.EB.EXCEP.LOG<EB.EXC.APPLICATION> = 'PP.ORDER.ENTRY'
+    R.EB.EXCEP.LOG<EB.EXC.ROUTINE> = 'V.PP.AUTH.OVE.BOE'
+    R.EB.EXCEP.LOG<EB.EXC.MODULE> = 'PP'
+    R.EB.EXCEP.LOG<EB.EXC.CODE> = '110'
+    R.EB.EXCEP.LOG<EB.EXC.VALUE> = "OVERRIDE CONDITION"
+    R.EB.EXCEP.LOG<EB.EXC.FILENAME> = 'F.PP.ORDER.ENTRY'
+    R.EB.EXCEP.LOG<EB.EXC.COMP.CODE> = 'GB0010001'
+    R.EB.EXCEP.LOG<EB.EXC.ACC.OFFICER> = '1'
+    R.EB.EXCEP.LOG<EB.EXC.RUN.DATE> = TODAY
+    R.EB.EXCEP.LOG<EB.EXC.REC.KEY> = V_FTNUM
+    IF CNT.OVERRIDE GT '1' THEN
+        FOR ICNT=1 TO CNT.OVERRIDE
+            V_OVE<1,ICNT> = V_OVERRIDE<1,ICNT>
+        NEXT ICNT
+    END ELSE
+        V_OVE = V_OVERRIDE
+    END
+*CHANGE SM TO VM IN V_OVERRIDE
+    V_OVERRIDE.NEW = V_OVE
+*    R.EB.EXCEP.LOG<EB.EXC.ERROR.MSG> = 'Bnk Reference - ':V_FT.ID:"-":V_OVE
+    RETURN
+
+WRITE.TO.FILE:
+    APPL.NAME = 'EXCEPTION.LOG.FILE'
+    OFS.PROCESS = 'PROCESS'
+    OFS.VERSION = 'EXCEPTION.LOG.FILE,UPLOAD'
+    OFS.GTSMODE = ''
+    V$DATE = DATE()
+    CURRTIME.SEQ = ''
+    CALL ALLOCATE.UNIQUE.TIME(CURRTIME.SEQ)
+    V$TIME = CURRTIME.SEQ
+    TRANSACTION.ID = V$DATE:V$TIME
+    OFS.MSG = ''
+    NO.OF.AUTH = ''
+*   CALL OFS.BUILD.RECORD(APPL.NAME,OFS.FUNC,OFS.PROCESS,OFS.VERSION,OFS.GTSMODE,NO.OF.AUTH,TRANSACTION.ID,R.EB.EXCEP.LOG, OFS.MSG)
+*   OFS.MSG.ID = ''
+*   OFS.SOURCE.ID = 'BOE.OFS.PROCESS'   ;* Set with SOURCE.TYPE as GLOBUS.
+*   OPTIONS = ''
+*   CALL OFS.POST.MESSAGE(OFS.MSG,OFS.MSG.ID,OFS.SOURCE.ID,OPTIONS)
+*"OVERRIDE CONDITION"
+    EB.ErrorProcessing.ExceptionLog("U","PP.ORDER.ENTRY","V.PP.AUTH.OVE.BOE","PP","110","OVERRIDE CONDITION","F.PP.ORDER.ENTRY",V_FTNUM,"",V_OVERRIDE.NEW,"1")
+*  CALL F.WRITE(FN.EXCEPTION.LOG.FILE,TRANSACTION.ID,R.EB.EXCEP.LOG)
+*  EB.TransactionControl.JournalUpdate("")
+    RETURN
+END

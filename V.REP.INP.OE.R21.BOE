@@ -1,0 +1,121 @@
+*-----------------------------------------------------------------------------
+* <Rating>14</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.REP.INP.OE.R21.BOE
+
+*-----------------------------------------------------------------------------
+* NAME: V.CPD.DPD.OE.EUR.USD.BOE
+*
+* PROGRAMMER: Manikandan (TEMENOS)
+*
+* DATE: 24/01/2024
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This Validation routine is used impose the credit account number for the repair payment using the CPD logic
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION.CONTROL - PP.ORDER.ENTRY
+* MM * TFS - 114153 - This Validation routine is used impose the credit account number for the repair payment using the CPD logic
+* MM * TFS - 116954 - Removing Instructing for next agent for SWIFT /STG Redirect MX payments
+* MM * TFS - 120346 - Repair queue changes credit account number after validation and errors
+* KR * TFS - 121344 -  Unable to process payment off status 235 repair queue - CreditAccountNumber imposed flag set to YES(Not Y)
+*-----------------------------------------------------------------------------
+
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_GTS.COMMON
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_F.VERSION
+    $INSERT I_F.BOE.CREDITPARTY.ROUTING
+    $USING EB.SystemTables
+    $USING PP.OrderEntryGUI
+
+    IF V$FUNCTION EQ 'I' THEN
+        GOSUB INIT
+
+        IF V_STATUS EQ '235' THEN
+            IF V_PAYDIRECTION EQ 'R' OR V_PAYDIRECTION EQ 'O' THEN
+                GOSUB REMOVETAG72
+* TFS - 120346 - Added MT103 and MT202
+                IF V_INCOMING_MSG_TYPE EQ 'pacs.008' OR V_INCOMING_MSG_TYPE EQ 'pacs.009' OR V_INCOMING_MSG_TYPE EQ 'pacs.004' OR V_INCOMING_MSG_TYPE EQ '103' OR V_INCOMING_MSG_TYPE EQ '202' THEN
+                    IF V_TRANS.CCY NE 'GBP' AND V_DEBIT.ACC.NUMBER AND V_RECEIVER_BIC THEN
+
+                        GOSUB ASSIGNCRACC
+                    END
+                END
+            END
+        END
+    END
+    RETURN
+
+INIT:
+    FN.BOE.CREDITPARTY.ROUTING = 'F.BOE.CREDITPARTY.ROUTING'
+    F.BOE.CREDITPARTY.ROUTING = ''
+    CALL OPF(FN.BOE.CREDITPARTY.ROUTING,F.BOE.CREDITPARTY.ROUTING)
+
+    V_PAYDIRECTION = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygDirection)
+    V_SOURCE = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygSource)
+    V_TRANS.CCY = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygTransactioncurrency)
+    V_DEBIT.ACC.NUMBER = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygDebitaccountnumber)
+    V_RECEIVER_BIC = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygReceiverinstitutionbic)
+    V_STATUS = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygStatus)
+    V_FTNUM = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygTransactionreferencenumber)
+    V_INCOMING_MSG_TYPE = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygIncomingmessagetype)
+    V_INSTRUCTION_CODE = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygInstructioncode)
+    V_OLD_INSTRUCTION_CODE = R.OLD(PP.OEYG.InstructionCode)
+    V_INSTRUCTION_NXT_AGENT = EB.SystemTables.getRNew(PP.OrderEntryGUI.OrderEntry.OeygNxtagtinstructioninformation)
+    PAYER.ACCT.POS = ''
+    REC.ACCT.POS = ''
+    RETURN
+
+ASSIGNCRACC:
+    CPD.ID = V_TRANS.CCY:".ROUTING"
+
+    CALL F.READ(FN.BOE.CREDITPARTY.ROUTING,CPD.ID,R.BOE.CREDITPARTY.ROUTING,F.BOE.CREDITPARTY.ROUTING,ER.BOE.CREDITPARTY.ROUTING)
+
+    V_CPD.PAYER.ACCT =  R.BOE.CREDITPARTY.ROUTING<CPD.PAYER.ACCOUNT>
+    CHANGE @VM TO @FM IN V_CPD.PAYER.ACCT
+    LOCATE V_DEBIT.ACC.NUMBER IN V_CPD.PAYER.ACCT SETTING PAYER.ACCT.POS THEN
+        O_CREDITACNUMBER = R.BOE.CREDITPARTY.ROUTING<CPD.RECEIVER.ACCOUNT,PAYER.ACCT.POS>
+        O_RECEIVER.BIC = R.BOE.CREDITPARTY.ROUTING<CPD.RECEIVER.BIC,PAYER.ACCT.POS>
+        O_CPD.CCY = R.BOE.CREDITPARTY.ROUTING<CPD.PAYMENT.CCY,PAYER.ACCT.POS>
+    END
+    IF V_RECEIVER_BIC EQ O_RECEIVER.BIC THEN
+        R.NEW(PP.OEYG.CreditAccountNumber) = O_CREDITACNUMBER
+        R.NEW(PP.OEYG.CreditAccountNumberImposedFlag) = 'YES'  ;*121344
+    END
+    RETURN
+REMOVETAG72:
+    IF V_PAYDIRECTION 'R' THEN
+        IF V_INCOMING_MSG_TYPE EQ 'pacs.008' OR V_INCOMING_MSG_TYPE EQ 'pacs.009' THEN
+            R.NEW(PP.OEYG.NxtAgtInstructionInformation) = ''
+        END
+
+*            V_DCNT = DCOUNT(V_INSTRUCTION_CODE,@VM)
+*        FOR CNT = 1 TO V_DCNT
+*            FINDSTR 'REC' IN V_INSTRUCTION_CODE<1,1> SETTING NXTAGENTPOS THEN
+*                IF V_INSTRUCTION_CODE<1,NXTAGENTPOS> EQ V_OLD_INSTRUCTION_CODE<1,NXTAGENTPOS> THEN
+*           DEL V_INSTRUCTION_CODE<1,NXTAGENTPOS>
+*                        DEL R.NEW(PP.OEYG.InstructionCode)<1,1,NXTAGENTPOS>
+*                    R.NEW(PP.OEYG.InstructionCode) = ''
+*                    NXTAGENTPOS = NXTAGENTPOS + 1
+*                END
+*                IF V_INSTRUCTION_CODE<1,NXTAGENTPOS>[4,2] EQ '//' THEN
+*                      DEL V_INSTRUCTION_CODE<1,NXTAGENTPOS>
+*                    DEL R.NEW(PP.OEYG.InstructionCode)<1,NXTAGENTPOS>
+*                    NXTAGENTPOS = NXTAGENTPOS + 1
+*                END
+*            END
+*        END
+*         NEXT CNT
+*    EB.SystemTables.setRNew(PP.OrderEntryGUI.OrderEntry.OeygInstructioncode,V_INSTRUCTION_CODE)
+*            R.NEW(PP.OEYG.InstructionCode)<1,2> = V_INSTRUCTION_CODE
+*    END
+*END
+    END
+    RETURN
+END

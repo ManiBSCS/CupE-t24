@@ -1,0 +1,139 @@
+*-----------------------------------------------------------------------------
+* <Rating>-64</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STANDING.INSTRUCTION.BOE
+*
+*-----------------------------------------------------------------------------
+* NAME: V.STANDING.INSTRUCTION.BOE
+*
+* PROGRAMMER: RICHARD KALAS (TEMENOS)
+*
+* DATE: 11/07/2001
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This routine is used by the version record to validate input
+*       in local reference field <1,1> against the concat file
+*       F.STANDING.INSTRUCTION.BOE to prevent a duplicate value being
+*       entered.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION - STANDING.ORDER,CHAPS.BOE in field 45, AUTH.ROUTINE
+*
+* CALLS:
+*      EB.LOCREF.SETUP
+*      ERR.BOE
+*      F.DELETE
+*      F.READ
+*      F.WRITE
+*      STORE.END.ERROR
+*      OPF
+*
+* CHANGE HISTORY:
+*
+*-----------------------------------------------------------------------------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.STANDING.ORDER
+    $INSERT I_GTS.COMMON
+
+
+    IF COMI NE "" THEN
+* Initialise variables for subroutine
+
+        GOSUB INITIALISE
+
+        GOSUB LOCAL.REF.SETUP
+
+* Open files required by routine
+
+        GOSUB OPEN.FILES
+
+* Process the record for the concat file
+
+        GOSUB PROCESS.CONCAT
+
+    END
+
+    RETURN
+
+
+
+*================================================================================
+INITIALISE:
+* Initialise variables for routine
+
+* ETEXT is the I_COMMON variable for error messages.
+
+    ETEXT = ''
+
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+LOCAL.REF.SETUP:
+
+    V_LOC.REF = ""
+    V_LR.FIELD = ""
+    V_LR.APP = 'STANDING.ORDER'
+    CALL EB.LOCREF.SETUP(V_LR.APP,V_LOC.REF)
+    V_NO.FIELDS = DCOUNT(V_LOC.REF,FM)
+    FOR V_TMP = 1 TO V_NO.FIELDS
+        V_LOC.REF<V_TMP> = V_LOC.REF<V_TMP,1>
+    NEXT V_TMP
+
+    V_LR.FIELD = 'INSTRUCTION.REF'
+    GOSUB GET.LOCAL.REF.FIELD
+    V_LR.INSTRUCTION.REF = V_LR.FIELD.NO
+*
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+GET.LOCAL.REF.FIELD:
+
+    LOCATE V_LR.FIELD IN V_LOC.REF<1> SETTING V_LR.FIELD.NO ELSE
+        TEXT = V_LR.FIELD:' NOT FOUND IN LOCAL.REF FOR ':V_LR.APP
+        CALL ERR.BOE('FATAL')
+    END
+    RETURN
+
+*================================================================================
+OPEN.FILES:
+* Open files required by routine
+
+
+* Open the concat file F.STANDING.INSTRUCTION.BOE
+
+    F.STANDING.INSTRUCTION.BOE = ''
+***B2C Changes
+*    FN.STANDING.INSTRUCTION.BOE = 'F.STANDING.INSTRUCTION.BOE'    ;* B2C Start
+    FN.STANDING.INSTRUCTION.BOE = 'F.STANDING.ORDER.INSTRUCTION.REF'  ;* B2C End
+    CALL OPF(FN.STANDING.INSTRUCTION.BOE,F.STANDING.INSTRUCTION.BOE)
+
+    RETURN
+*
+*================================================================================
+*
+PROCESS.CONCAT:
+* Build the concat record from STANDING.ORDER information passed
+* in the common variable R.NEW, and the key passed in ID.NEW
+
+* COMI will be used as the ID to the concat file and cannot contain spaces.
+* Check for spaces and error if found.
+
+    IF INDEX(COMI," ",1) THEN
+        ETEXT = "Cannot contain spaces"
+    END
+
+    IF ETEXT THEN
+        CALL STORE.END.ERROR
+    END
+    RETURN
+*================================================================================
+
+END

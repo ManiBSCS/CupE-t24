@@ -1,0 +1,155 @@
+*-----------------------------------------------------------------------------
+* <Rating>-59</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.STO.ACTION.BOE
+*-----------------------------------------------------------------------------
+* NAME: (P37, P37.1, P208) Set-Up / Amend / Cancel Standing Order
+*
+* PROGRAMMER: Richard Kalas (Temenos)
+*
+* DATE: 27/09/2001
+*
+* DESCRIPTION:
+*
+*      This routine defaults an ACTION entry against the record
+*      indicating the current activity. ie. NEW, AMENDED (AMEND), or CANCELLED (CANCEL).
+*      This is associated to an ACTION.DATE for reporting purposes.
+*
+* TECHNICAL DESCRIPTION:
+*
+*      The action is defined at authorisation so that all input is
+*      complete and can be used as test criteria.
+*      ie. A NEW record has no CURR.NO in an old record, common variable
+*      R.OLD, If a RECORD.STATUS is 'INAU' the record is either a NEW
+*      or an AMEND. If it is 'RNAU' it is being reversed/CANCEL.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*      <<reference number>>
+*
+* CALLED BY:
+*      Versions: STANDING.ORDER,V.INPUT.BOE - attached to AUT.NEW.CONTENT
+*
+* CALLS:
+*
+*      <<append new calls>>
+*
+* CHANGE HISTORY:
+*      151001:PT:TEM * REQUEST TO CHANGE ACTION CODES TO 3 LTR STRINGS FOR
+*                    * CREATE-FORM.
+*
+* Narmada - 12/09/2011 - T24 717
+* To make the action to appear in the record.
+*
+* 14/02/2013 T24UPG-20400 Ronaldo Deocampo
+*            Change routine to adjust to how T24 Browser is handling CHECK.REC.RTN
+*            in VERSION, i.e. CHECK.REC.RTN is called only on input of a record,
+*            it is not called on reverse or authorization.
+*-----------------------------------------------------------------------------
+*
+* Inserts and equates
+*
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.STANDING.ORDER
+*-----------------------------------------------------------------------------
+
+* Only run if in 'authorise' function. This means there has been an input
+* or a change to the record.
+
+    GOSUB INITIALISE
+    GOSUB LOCAL.REF.SETUP
+
+*   Only default values if valid action exists
+    IF V_ACTION NE '' THEN
+        GOSUB DEFAULT.VALUES
+    END
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+INITIALISE:
+
+* Set action from version name.
+    BEGIN CASE
+    CASE V$FUNCTION EQ 'I' AND R.OLD(STO.CURR.NO) EQ ''     ;* No historic record ;* T24UPG-20400.s/e
+        V_ACTION = 'NEW'
+
+*   Changes T24 717 (S)
+    CASE V$FUNCTION EQ 'I'    ;* Input exists ie. AMEND ;* T24UPG-20400.s/e
+        V_ACTION = 'AMENDED'
+
+    CASE V$FUNCTION EQ 'R'    ;* Reversal/CANCEL ;* T24UPG-20400.s/e
+        V_ACTION = 'CANCELLED'
+
+*   Changes T24 717 (E)
+    CASE 1
+        V_ACTION = ''
+    END CASE
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+LOCAL.REF.SETUP:
+
+* Call to EB.LOCREF.SETUP returns an array of local reference fieldnames in the
+* correct order they appear on the application.
+
+    V_LOC.REF = ""
+    V_LR.FIELD = ""
+    V_LR.APP = 'STANDING.ORDER'         ;* Change the application ID.
+    CALL EB.LOCREF.SETUP(V_LR.APP,V_LOC.REF)
+    V_NO.FIELDS = DCOUNT(V_LOC.REF,FM)
+    FOR V_TMP = 1 TO V_NO.FIELDS
+        V_LOC.REF<V_TMP> = V_LOC.REF<V_TMP,1>
+    NEXT V_TMP
+
+    V_LR.FIELD = 'XX<ACTION'  ;* Change to the field name required
+    GOSUB GET.LOCAL.REF.FIELD
+    V_LR.ACTION = V_LR.FIELD.NO         ;* Assign V_LR.FIELD.NO to a local variable
+
+    V_LR.FIELD = 'XX>ACTION.DATE'
+    GOSUB GET.LOCAL.REF.FIELD
+    V_LR.ACTION.DATE = V_LR.FIELD.NO
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+GET.LOCAL.REF.FIELD:
+
+    LOCATE V_LR.FIELD IN V_LOC.REF<1> SETTING V_LR.FIELD.NO ELSE
+        TEXT = V_LR.FIELD:' NOT FOUND IN LOCAL.REF FOR ':V_LR.APP
+        CALL ERR.BOE('FATAL')
+    END
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+DEFAULT.VALUES:
+
+* Set field ACTION
+* 17/01/2002 - Richard Kalas - Changed multi-value action and date to a
+*              single value. Enquiries should read previous values from
+*              the standing order history file.
+
+    R.NEW(STO.LOCAL.REF)<1,V_LR.ACTION> = V_ACTION
+
+*   Set ACTION.DATE
+    R.NEW(STO.LOCAL.REF)<1,V_LR.ACTION.DATE> = TODAY
+
+*   Call delivery to produce a final delivery advice for cancellations
+*   Changes T24 717 (S)
+    IF V_ACTION = 'CANCELLED' THEN
+*   Changes T24 717 (E)
+        IF R.NEW(STO.PRINT.ADVICE) = 'Y' OR R.NEW(STO.PRINT.ADVICE) = 'ALL' THEN
+            CALL STO.DELIVERY(ID.NEW)
+        END
+    END
+
+    RETURN
+*
+*-----------------------------------------------------------------------------
+*
+END

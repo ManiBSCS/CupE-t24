@@ -1,0 +1,82 @@
+*-----------------------------------------------------------------------------
+* <Rating>79</Rating>
+*-----------------------------------------------------------------------------
+      SUBROUTINE V.PSD.BACS.DATE.CHECK.BOE
+*=========================================================================================
+*
+* PROGRAMMER: Paul Gifford
+*
+* DATE: 11/04/2011
+*
+* DESCRIPTION:
+*
+*    Validation routine to ensure the CURRENT.FREQUENCY field in STANDING.ORDER,BACS.BOE
+*    is set to be greater than the next working day.
+*
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*     T24-694
+*
+* CALLED BY:
+*       VERSION STANDING.ORDER,BACS.BOE
+*
+* CALLS:
+* CDT, STORE.END.ERROR, REFRESH.FIELD
+*
+* CHANGE HISTORY:
+*      <<change control entries>>
+*=========================================================================================
+
+$INSERT I_COMMON
+$INSERT I_EQUATE
+$INSERT I_F.STANDING.ORDER
+
+*-----------------------------------------------------------------------------
+* Make sure that the Validation routine does not get run when the
+* Application is in Commit mode or (VAL)idation mode.
+
+      IF MESSAGE EQ "VAL" THEN RETURN
+*-----------------------------------------------------------------------------
+
+
+
+      IF AF = STO.CURRENT.FREQUENCY THEN
+
+         GOSUB INITIALISE
+
+         GOSUB CHECK.DATE
+
+
+
+      END
+
+
+      RETURN
+
+*-----------------------------------------------------------------------------
+INITIALISE:
+
+* Set value for Next Working Day
+
+      V_NWDAY = TODAY
+
+      CALL CDT ("",V_NWDAY,"+1W")
+
+      V_CURR.FREQ = COMI
+
+      V_SHORT.FREQ = V_CURR.FREQ[1,8]
+
+*-----------------------------------------------------------------------------
+CHECK.DATE:
+
+      IF V_SHORT.FREQ LE V_NWDAY THEN
+         ETEXT = 'FREQ MUST BE GT NEXT WORKING DAY'
+         CALL STORE.END.ERROR
+
+      END ELSE
+         CALL REFRESH.FIELD(STO.CURRENT.FREQUENCY,"")
+      END
+
+      RETURN
+*-----------------------------------------------------------------------------
+   END

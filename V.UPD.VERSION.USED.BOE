@@ -1,0 +1,57 @@
+*-----------------------------------------------------------------------------
+* <Rating>95</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.UPD.VERSION.USED.BOE
+*----------------------------------------------------------------------------
+* Name        : V.UPD.VERSION.USED.BOE
+*
+* Date        : 28 January 2013
+*
+* Programmer  : Paul Gibbons
+*
+* Description : Routine attached to version control which will update the FT record with the name of the
+*               version used to do the input. This is so we can control which versions are allowed to do the authorisation
+*
+* CHANGE REQUEST / DEVELOPMENT REF: R11 Upgrade: Gemini 19877
+*
+*-----------------------------------------------------------------------------
+* Modification History:
+* 06/02/2013 T24UPG-19877 Ronaldo Deocampo
+*            Use GET.LOC.REF to get the local reference position
+*-----------------------------------------------------------------------------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.FUNDS.TRANSFER
+
+*
+** Main
+    IF V$FUNCTION = "I" THEN
+*       Get local ref field pos
+        YFIELD.NAME = "VERSION.ID"
+        CALL GET.LOC.REF(APPLICATION,YFIELD.NAME,YVERSION.ID.POS)     ;* T24UPG-19877.s/e
+
+*       Check what's in there already, input on input
+        YPREV.VERS = ""
+        YPREV.VERS = R.NEW(FT.LOCAL.REF)<1,YVERSION.ID.POS>
+
+        YTHIS.VER  = APPLICATION:PGM.VERSION
+        IF YPREV.VERS THEN
+*           Check it's already in there
+            LOCATE YTHIS.VER IN YPREV.VERS<1,1,1> SETTING VPOS ELSE VPOS = 0
+
+            IF VPOS = 0 THEN
+*               Not there so update the field with the current version
+                YPREV.VERS<1,1,-1> = YTHIS.VER
+
+                R.NEW(FT.LOCAL.REF)<1,YVERSION.ID.POS> = YPREV.VERS
+
+                CALL REBUILD.SCREEN
+            END
+        END ELSE
+*           First one
+            R.NEW(FT.LOCAL.REF)<1,YVERSION.ID.POS,1> = YTHIS.VER
+        END
+    END
+
+    RETURN
+END

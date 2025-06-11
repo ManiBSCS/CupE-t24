@@ -1,0 +1,166 @@
+*-----------------------------------------------------------------------------
+* <Rating>240</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.POE.OFS.CSL.HANDBACK(iStatusAction)
+*--------------------------------------------------------------------------
+* Name   : V.POE.OFS.CSL.HANDBACK (Cloned from V.FT.OFS.CSL.HANDBACK)
+*
+* By     : Peter Anton (Paul Gibbons really)
+*
+* Date   : 23rd October 2020
+*
+* For    : T24 Upgrade to R19 (with TPH)
+*
+* Object : VERSION FT,OFS.CSL.BOE FT,STP.CHAPS.REPAIR.BOE
+*
+* Description:
+* ~~~~~~~~~~~~
+* This routine is attached to the R19 OFS PP.Order.Entry version and will write back
+* (to a file) the Openlink reference and its corresponding TPH  "FT" number.
+* Triggered by Status 654 in the version used for repair.
+*
+* Change History:
+* ~~~~~~~~~~~~~~~
+*--------------------------------------------------------------------------
+*
+* Inserts
+**-------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PP.ORDER.ENTRY
+    $INSERT I_GTS.COMMON
+    $INSERT I_PaymentWorkflowDASService_PaymentRecord
+    $INSERT I_PaymentFrameworkService_PORHistoryLog
+    $INSERT I_F.POR.TRANSACTION
+    $INSERT I_F.POR.SUPPLEMENTARY.INFO
+    $INSERT I_TRIPService_StatusAction
+    $USING PP.PaymentWorkflowGUI
+    $INSERT I_COMMON.BOE
+
+
+* Main Section
+**------------
+
+    V_RECORD.STATUS = R.NEW(PP.OEYG.RECORD.STATUS)
+    IF V$FUNCTION = "A" AND V_RECORD.STATUS = "RNAU" THEN
+        RETURN
+    END
+
+    GOSUB INITIALISE
+
+* Get the local ref position
+    GOSUB CHECK.IF.OPLK.TXN
+
+    IF V_OL.SEQ THEN
+* If this trade is an automated openlink trade then
+* create the handback file. The OL.SEQNUM field is only set
+* by Openlink
+
+        GOSUB PROCESS
+    END
+
+    RETURN
+
+INITIALISE:
+**---------
+*
+    FN.POR.SUPPLEMENTARY.INFO = 'F.POR.SUPPLEMENTARY.INFO'
+    F.POR.SUPPLEMENTARY.INFO = ''
+    CALL OPF(FN.POR.SUPPLEMENTARY.INFO,F.POR.SUPPLEMENTARY.INFO)
+
+    FN.PP.ORDER.ENTRY = 'F.PP.ORDER.ENTRY'
+    F.PP.ORDER.ENTRY = ''
+    CALL OPF(FN.PP.ORDER.ENTRY,F.PP.ORDER.ENTRY)
+
+    paymentRecord = iStatusAction<StatusAction.paymentRecord>
+    oPaymentRecord = RAISE(paymentRecord)
+
+    V_OL.SEQ = ""
+    V_OL.REF = ""
+
+    RETURN
+
+OPEN.HANDBACK.FILE:
+*************************************************************************
+* Open the handback file
+    OPEN "HB.OFS.CSL" TO HB.OFS.CSL ELSE
+        EXECUTE "mkdir HB.OFS.CSL"
+        OPEN "HB.OFS.CSL" TO HB.OFS.CSL ELSE E = "NO HANDBACK FILE";STOP
+    END
+
+    RETURN
+
+PROCESS:
+**-------
+* Get the Openlink information and build the handback record
+    GOSUB OPEN.HANDBACK.FILE
+    R.HANDBACK = ""
+
+    V_HB.LINE = V_OL.REF:"ID":V_OL.SEQ
+
+* Mercator want a specific structure to the header (Field 1 to us)
+* OPEN.LINK.REF; then the word "ID"; then the OL.SEQNUM then a comma then either
+* 1. MTACG
+* 2. OLSWAP (Openlink SWAP to uniquely identify system and business)
+
+** What is the equivalent in TPH land (to FT.Transaction.Type)?
+    IF V_BOOK.TRANSFER = "B" THEN
+*PP.ORDER.ENTRY.DIRECTION = "B" (Book Transfer) (equivalent of "AC")
+* If its an AC type, set the identifier that mercator needs to route it
+
+        V_HB.LINE := ",MTACG"
+* The file name is also changed
+        MERC.HEADER = "OLCSLAC-":V_POR.ID
+
+    END ELSE
+* As it was for non AC types
+        V_HB.LINE := ",OLSWAPS"
+* Make the ID unique
+        MERC.HEADER = "OLCSL-":V_POR.ID
+
+    END
+
+    R.HANDBACK<1> = V_HB.LINE
+
+    R.HANDBACK<2> = V_OL.SEQ  ;* Unique sequence no
+    R.HANDBACK<3> = V_POR.ID  ;* (Used to be FT id from Globus)
+    R.HANDBACK<4> = V_OL.REF  ;* deal no & doc no from Openlink
+
+    WRITE R.HANDBACK ON HB.OFS.CSL,MERC.HEADER
+
+    RETURN
+*********************************************************************
+CHECK.IF.OPLK.TXN:
+*
+    R.POR.SUPPLEMENTARY.INFO =''
+    ERR.POR.SUPPLEMENTARY.INFO = ''
+    R.PP.ORDER.ENTRY = ''
+    ERR.PP.ORDER.ENTRY = ''
+    V_BOOK.TRANSFER = ''
+
+    V_POR.ID = oPaymentRecord<PaymentRecord.ftNumber>
+    CALL F.READ(FN.POR.SUPPLEMENTARY.INFO,V_POR.ID,R.POR.SUPPLEMENTARY.INFO,F.POR.SUPPLEMENTARY.INFO,ERR.POR.SUPPLEMENTARY.INFO)
+    IF R.POR.SUPPLEMENTARY.INFO THEN
+        V_OE.NUM =  R.POR.SUPPLEMENTARY.INFO<PORID.ORDER.ENTRY.ID>
+        CALL F.READ(FN.PP.ORDER.ENTRY,V_OE.NUM,R.PP.ORDER.ENTRY,F.PP.ORDER.ENTRY,ERR.PP.ORDER.ENTRY)
+        IF R.PP.ORDER.ENTRY THEN
+            V_BOOK.TRANSFER = R.PP.ORDER.ENTRY<PP.OEYG.Direction>
+        END
+*
+*Look for the OL.SEQNUM and OPEN.LINK.REF local.refs
+*
+        V_LREF.NAME  = R.POR.SUPPLEMENTARY.INFO<PORID.LOC.FIELD.NAME><1>
+        V_LREF.VALUE = R.POR.SUPPLEMENTARY.INFO<PORID.LOC.FIELD.VALUE><1>
+
+        V_OL.SEQNUM = "OL.SEQNUM"
+        LOCATE V_OL.SEQNUM IN V_LREF.NAME<1,1> SETTING POS ELSE POS = 0
+        V_OL.SEQ = V_LREF.VALUE<1,POS>
+
+        V_OL.REF    = "OPEN.LINK.REF"
+        LOCATE V_OL.REF IN V_LREF.NAME<1,1> SETTING POS ELSE POS = 0
+        V_OL.REF = V_LREF.VALUE<1,POS>
+*
+    END
+
+    RETURN
+END
