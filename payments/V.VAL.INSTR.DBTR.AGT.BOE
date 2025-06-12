@@ -1,0 +1,48 @@
+*-----------------------------------------------------------------------------
+* <Rating>-56</Rating>
+*-----------------------------------------------------------------------------
+    SUBROUTINE V.VAL.INSTR.DBTR.AGT.BOE
+
+*-----------------------------------------------------------------------------
+* NAME: V.REG.RPTG.FLDS
+*
+* TECHNICAL DESCRIPTION:
+*
+*       This input routing is to validate Instructing agent and Debtor agent (to fix TFS-120742)
+*       If they are same except the last characters with 'XXX', then append 'XXX' to the agent without it.
+*
+* CHANGE REQUEST / DEVELOPMENT REF:
+*
+* CALLED BY:
+*
+*       VERSION'S -
+*
+*-----------------------------------------------------------------------------
+*Modification:
+*
+*-------------------------------------------------------------------------------
+    $INSERT I_COMMON
+    $INSERT I_EQUATE
+    $INSERT I_F.PP.ORDER.ENTRY
+
+
+    Y.DIR = R.NEW(PP.OEYG.Direction)
+    Y.INTR.AGT = R.NEW(PP.OEYG.SenderInstitutionBIC)
+    Y.DBTR.AGT = R.NEW(PP.OEYG.OrderingInstIdentifierCode)
+
+    BEGIN CASE
+    CASE Y.INTR.AGT[3] EQ 'XXX' AND Y.INTR.AGT[1,8] EQ Y.DBTR.AGT
+        R.NEW(PP.OEYG.OrderingInstIdentifierCode) = Y.DBTR.AGT:'XXX'
+
+    CASE Y.DBTR.AGT[3] EQ 'XXX' AND Y.DBTR.AGT[1,8] EQ Y.INTR.AGT
+        R.NEW(PP.OEYG.SenderInstitutionBIC) = Y.INTR.AGT:'XXX'
+
+    CASE LEN(Y.DBTR.AGT) EQ '8' AND LEN(Y.INTR.AGT) EQ '8'
+        R.NEW(PP.OEYG.OrderingInstIdentifierCode) = Y.DBTR.AGT:'XXX'
+        R.NEW(PP.OEYG.SenderInstitutionBIC) = Y.INTR.AGT:'XXX'
+
+    END CASE
+
+    RETURN
+
+END
